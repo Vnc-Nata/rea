@@ -67,6 +67,7 @@ export interface FiltroAns {
   grupo?: string;
   contratacao?: string;
   acomodacao?: string;
+  cobertura?: string; // segmentacaoGrupo
   copart?: string; // "com" | "sem"
   uf?: string;
   municipio?: string;
@@ -79,6 +80,7 @@ export function filtrarPlanos(base: BaseAns, f: FiltroAns) {
     if (f.grupo && p.grupo !== f.grupo) return false;
     if (f.contratacao && p.contratacao !== f.contratacao) return false;
     if (f.acomodacao && p.acomodacao !== f.acomodacao) return false;
+    if (f.cobertura && p.segmentacaoGrupo !== f.cobertura) return false;
     if (f.copart === "com" && p.fatorModerador === "Ausente") return false;
     if (f.copart === "sem" && p.fatorModerador !== "Ausente") return false;
     if (f.uf && p.ufs.length && !p.ufs.includes(f.uf)) return false;
@@ -116,6 +118,7 @@ export function opcoes(base: BaseAns) {
     grupos: u(base.planos.map((p) => p.grupo)),
     contratacoes: u(base.planos.map((p) => p.contratacao)),
     acomodacoes: u(base.planos.map((p) => p.acomodacao)),
+    coberturas: u(base.planos.map((p) => p.segmentacaoGrupo)),
     ufs: u(base.planos.flatMap((p) => p.ufs)),
   };
 }

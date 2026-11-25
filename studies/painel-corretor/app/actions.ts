@@ -7,7 +7,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { updateDb } from "@/lib/db";
-import type { Faixa, FiltroCotacao, Perfil } from "@/lib/types";
+import { contaPadrao } from "@/lib/conta-db";
+import type { Conta, Db, Faixa, FiltroCotacao, OpcoesEnvio, Perfil, Usuario } from "@/lib/types";
 import { vidasVazias } from "@/lib/types";
 import { novoId } from "@/lib/utils";
 
@@ -132,4 +133,140 @@ export async function updatePerfil(perfil: Pick<Perfil, "corretora" | "telefone"
   });
   revalidatePath("/", "layout");
   return { success: true };
+}
+
+// ---------- Opções, duplicar, destacar, contato/negócio ----------
+
+export async function updateOpcoes(cotacaoId: string, opcoes: OpcoesEnvio) {
+  updateDb((db) => {
+    const c = db.cotacoes.find((c) => c.id === cotacaoId);
+    if (c) c.opcoes = opcoes;
+  });
+  revalidatePath(`/cotacoes/${cotacaoId}/edit`);
+}
+
+export async function duplicateCotacao(cotacaoId: string) {
+  const id = updateDb((db) => {
+    const c = db.cotacoes.find((c) => c.id === cotacaoId);
+    if (!c) return null;
+    const agora = new Date().toISOString();
+    const id = novoId("cot");
+    db.cotacoes.unshift({
+      ...structuredClone(c),
+      id,
+      titulo: `${c.titulo} (cópia)`.slice(0, 50),
+      criadaEm: agora,
+      criadaPor: db.perfil.usuario,
+      cenarios: c.cenarios.map((x) => ({ ...x, id: novoId("cen") })),
+      eventos: [{ tipo: "Duplicada", em: agora, por: db.perfil.usuario }],
+      visualizacoes: 0,
+    });
+    return id;
+  });
+  if (id) redirect(`/cotacoes/${id}/edit`);
+}
+
+export async function onPlanoDestaque(cotacaoId: string, cenarioId: string) {
+  updateDb((db) => {
+    const cen = db.cotacoes.find((c) => c.id === cotacaoId)?.cenarios.find((x) => x.id === cenarioId);
+    if (cen) cen.destaque = !cen.destaque;
+  });
+  revalidatePath(`/cotacoes/${cotacaoId}/edit`);
+}
+
+export async function linkContato(cotacaoId: string, contato: string) {
+  updateDb((db) => {
+    const c = db.cotacoes.find((c) => c.id === cotacaoId);
+    if (c) c.contato = contato.trim().slice(0, 80) || undefined;
+  });
+  revalidatePath(`/cotacoes/${cotacaoId}/edit`);
+}
+
+export async function linkNegocio(cotacaoId: string, negocio: string) {
+  updateDb((db) => {
+    const c = db.cotacoes.find((c) => c.id === cotacaoId);
+    if (c) c.negocio = negocio.trim().slice(0, 80) || undefined;
+  });
+  revalidatePath(`/cotacoes/${cotacaoId}/edit`);
+}
+
+// ---------- Configurações da conta ----------
+
+function comConta<T>(fn: (conta: Conta, db: Db) => T): T {
+  return updateDb((db) => {
+    db.conta ??= contaPadrao(db);
+    return fn(db.conta, db);
+  });
+}
+
+export async function updateCorretora(dados: Conta["corretora"]): Promise<Result> {
+  if (!dados.nome.trim()) return { success: false, error: "Informe o nome da corretora." };
+  comConta((conta, db) => {
+    conta.corretora = { ...dados, nome: dados.nome.trim() };
+    db.perfil.corretora = conta.corretora.nome;
+  });
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
+export async function addLicencas(qtd: number) {
+  comConta((conta) => {
+    conta.licencas = Math.max(1, conta.licencas + Math.floor(qtd));
+  });
+  revalidatePath("/conta/assinatura");
+}
+
+export async function convidarUsuario(nome: string, email: string, equipeId?: string): Promise<Result> {
+  if (!nome.trim() || !/^\S+@\S+\.\S+$/.test(email)) return { success: false, error: "Informe nome e e-mail válidos." };
+  const r = comConta((conta): Result => {
+    if (conta.usuarios.filter((u) => u.ativo).length >= conta.licencas)
+      return { success: false, error: "Todas as licenças estão em uso. Adicione novas licenças." };
+    if (conta.usuarios.some((u) => u.email === email)) return { success: false, error: "E-mail já cadastrado." };
+    conta.usuarios.push({ id: novoId("usr"), nome: nome.trim(), email, perfil: "Usuário", equipeId: equipeId || undefined, ativo: true });
+    return { success: true };
+  });
+  revalidatePath("/conta/usuarios");
+  return r;
+}
+
+export async function updateUsuario(id: string, dados: Partial<Pick<Usuario, "perfil" | "equipeId" | "ativo">>) {
+  comConta((conta) => {
+    const u = conta.usuarios.find((u) => u.id === id);
+    if (u) Object.assign(u, dados);
+  });
+  revalidatePath("/conta/usuarios");
+}
+
+export async function criarEquipe(nome: string): Promise<Result> {
+  if (!nome.trim()) return { success: false, error: "Informe o nome da equipe." };
+  comConta((conta) => {
+    conta.equipes.push({ id: novoId("eq"), nome: nome.trim().slice(0, 40) });
+  });
+  revalidatePath("/conta/equipes");
+  return { success: true };
+}
+
+export async function excluirEquipe(id: string) {
+  comConta((conta) => {
+    conta.equipes = conta.equipes.filter((e) => e.id !== id);
+    for (const u of conta.usuarios) if (u.equipeId === id) u.equipeId = undefined;
+  });
+  revalidatePath("/conta/equipes");
+}
+
+export async function gerarChaveApi() {
+  const chave = comConta((conta) => {
+    conta.apiKey = `pm_estudo_${crypto.randomUUID().replace(/-/g, "")}`;
+    return conta.apiKey;
+  });
+  revalidatePath("/conta/integracoes");
+  return chave;
+}
+
+export async function updatePreferencias(operadorasHabilitadas: string[], maisInfoRelevantes: boolean) {
+  comConta((conta) => {
+    conta.operadorasHabilitadas = operadorasHabilitadas;
+    conta.maisInfoRelevantes = maisInfoRelevantes;
+  });
+  revalidatePath("/", "layout");
 }

@@ -1,5 +1,5 @@
 export const GRUPOS = [
-  { titulo: "Geral", itens: [["perfil", "Perfil"], ["conta", "Conta"]] },
+  { titulo: "Geral", itens: [["perfil", "Perfil"], ["corretora", "Conta"]] },
   {
     titulo: "Conta",
     itens: [

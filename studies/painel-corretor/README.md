@@ -30,17 +30,18 @@ Os dados ficam em `data/db.json`, criado na primeira requisição a partir de
 | Início | `/` | Saudação com o nome da corretora do perfil |
 | Cotações | `/cotacoes` | Busca, filtro de período (7/30 dias/todo), paginação, status visualizado, cards de totais |
 | Nova cotação | `/cotacoes/nova` | Cria a cotação e abre a distribuição de vidas |
-| Editar cotação | `/cotacoes/[id]/edit` | Título editável, distribuição de vidas por faixa ANS ou por datas de nascimento coladas, seletor de planos (Saúde/Dental, PF/PME/Adesão, cidade, MEI, acomodação, coparticipação, contratação), cards com preço total, remover plano, CNPJ com máscara, linha do tempo, comparativo de rede, enviar (copiar mensagem + link, WhatsApp), excluir |
-| Proposta do cliente | `/cotacoes/[id]` e `/cotacoes/[id]/cenarios/[cenarioId]` | Página pública com preço por faixa, "Tenho interesse" via WhatsApp, rede credenciada; cada abertura registra "Visualizada" (o link com `?preview=1`, usado pelo painel, não conta) |
-| Busca ANS | `/busca-ans`, `/busca-ans/[registro]` | Filtro por nome/código, modalidade, cidade e acomodação; detalhe com IDSS, reajuste, abas Preços/Abrangência/Rede |
-| Produtos | `/produtos`, `/produtos/[operadoraId]` | Grade de operadoras filtrada; tabelas de preço em acordeão, rede, imprimir |
-| Configurações | `/conta/perfil` | Nome, telefone e mensagem padrão (usada no "Enviar") |
+| Editar cotação | `/cotacoes/[id]/edit` | Título editável, distribuição de vidas por faixa ANS ou por datas de nascimento coladas, seletor de planos (Saúde/Dental, PF/PME/Adesão, cidade, MEI, acomodação, coparticipação, contratação), filtros de perfil do cliente (econômico/intermediário/premium), faixa de valor e hospitais de preferência, cards com preço total, destacar ou remover plano, CNPJ com máscara, contato e negócio, linha do tempo, comparativo de rede; menu com Compartilhar (WhatsApp, e-mail, imprimir, link e copiar), Imprimir, Opções (validade, valores, rede, mais informações), Duplicar e Excluir |
+| Proposta do cliente | `/cotacoes/[id]` e `/cotacoes/[id]/cenarios/[cenarioId]` | Página pública com preço por faixa, plano destacado como "Recomendado", respeita as Opções da cotação (oculta valores, rede ou detalhes; mostra "Proposta expirada" após a validade), "Tenho interesse" via WhatsApp, rede credenciada; cada abertura registra "Visualizada" (o link com `?preview=1`, usado pelo painel, não conta) |
+| Busca ANS | `/busca-ans`, `/busca-ans/[registro]` | Com `data/ans/base.json` importado, usa os dados reais da ANS: filtros por nome/código, modalidade, UF, cidade, cobertura, acomodação e coparticipação; detalhe com VCM mínimo/mensalidade/máximo por faixa, abrangência e características. Sem a base, mostra os dados fictícios |
+| Produtos | `/produtos`, `/produtos/[operadoraId]` | Grade de operadoras filtrada (inclui Aceita MEI e contratação opcional/compulsória); tabelas de preço em acordeão, rede, imprimir |
+| Configurações | `/conta/*` | Perfil (foto, nome, telefone, mensagem padrão), Corretora (logo, cidade, redes sociais), Assinatura (licenças, faturas fictícias), Usuários (convite com limite de licenças, perfil, ativo/inativo), Equipes, Integrações (chave de API de estudo) e Preferências (operadoras habilitadas no seletor, "mais informações") |
 | Tema | qualquer tela | Claro/escuro, salvo no navegador |
 
 | Base ANS | `/base-ans` | Planos ativos das operadoras escolhidas com o VCM por faixa etária da ANS, filtros (operadora, contratação, acomodação, coparticipação, UF, município) e estimativa pelo número de vidas em cada faixa |
 
-Contatos e Negócios (CRM), as demais seções de Configurações, notificações push,
-assistente de IA e login são apenas indicados, não recriados.
+Contatos e Negócios (CRM, que no Painel é outro sistema com login próprio), notificações push,
+o assistente de IA (só o botão) e o login são apenas indicados, não recriados. Fotos e logos
+são só pré-visualizadas no navegador, sem gravar.
 
 ## Base ANS (dados reais e públicos)
 

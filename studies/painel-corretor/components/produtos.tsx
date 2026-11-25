@@ -17,22 +17,45 @@ export function ProdutosGrid({ operadoras, planos }: { operadoras: Operadora[]; 
   const [cidade, setCidade] = useState("São Paulo - SP");
   const [acomodacao, setAcomodacao] = useState("");
   const [copart, setCopart] = useState("");
+  const [mei, setMei] = useState("");
+  const [contratacao, setContratacao] = useState("");
   const ok = (p: Plano) =>
     p.segmento === segmento &&
     p.modalidade === modalidade &&
     p.cidades.includes(cidade) &&
     (!acomodacao || p.acomodacao === acomodacao) &&
     (!copart || p.coparticipacao === copart) &&
+    (!mei || (modalidade === "PME" && p.aceitaMei)) &&
+    (!contratacao || p.contratacao === contratacao) &&
     (!q || p.nome.toLowerCase().includes(q.toLowerCase()));
   const ops = operadoras.filter((o) => planos.some((p) => p.operadoraId === o.id && ok(p)));
-  const qs = new URLSearchParams({ modalidade, segmento, cidade }).toString();
-  const Lista = ({ titulo, itens, v, set }: { titulo: string; itens: string[]; v: string; set: (s: string) => void }) => (
+  const qs = new URLSearchParams({
+    modalidade,
+    segmento,
+    cidade,
+    ...(mei && modalidade === "PME" ? { mei: "1" } : {}),
+    ...(contratacao ? { contratacao } : {}),
+  }).toString();
+  const Lista = ({
+    titulo,
+    itens,
+    v,
+    set,
+  }: {
+    titulo: string;
+    itens: string[];
+    v: string;
+    set: (s: string) => void;
+  }) => (
     <div className="px-1">
       <div className="mb-2 text-sm font-medium">{titulo}</div>
       <ul className="space-y-1 text-sm text-muted-foreground">
         {itens.map((i) => (
           <li key={i}>
-            <button onClick={() => set(v === i ? "" : i)} className={cn("hover:text-foreground", v === i && "font-semibold text-primary")}>
+            <button
+              onClick={() => set(v === i ? "" : i)}
+              className={cn("hover:text-foreground", v === i && "font-semibold text-primary")}
+            >
               {i}
             </button>
           </li>
@@ -51,8 +74,20 @@ export function ProdutosGrid({ operadoras, planos }: { operadoras: Operadora[]; 
             <option key={c}>{c}</option>
           ))}
         </Select>
-        <Lista titulo="Acomodação" itens={["Quarto Coletivo", "Quarto Individual"]} v={acomodacao} set={setAcomodacao} />
-        <Lista titulo="Coparticipação" itens={["Com coparticipação", "Sem coparticipação"]} v={copart} set={setCopart} />
+        <Lista
+          titulo="Acomodação"
+          itens={["Quarto Coletivo", "Quarto Individual"]}
+          v={acomodacao}
+          set={setAcomodacao}
+        />
+        <Lista
+          titulo="Coparticipação"
+          itens={["Com coparticipação", "Sem coparticipação"]}
+          v={copart}
+          set={setCopart}
+        />
+        {modalidade === "PME" && <Lista titulo="MEI" itens={["Aceita MEI"]} v={mei} set={setMei} />}
+        <Lista titulo="Contratação" itens={["Opcional", "Compulsória"]} v={contratacao} set={setContratacao} />
       </div>
       <div className="flex-1">
         <div className="grid grid-cols-[repeat(auto-fill,_minmax(140px,_1fr))] gap-4">
@@ -66,7 +101,9 @@ export function ProdutosGrid({ operadoras, planos }: { operadoras: Operadora[]; 
             </Link>
           ))}
         </div>
-        {!ops.length && <p className="text-center text-sm text-muted-foreground">Nenhum produto encontrado com esses filtros.</p>}
+        {!ops.length && (
+          <p className="text-center text-sm text-muted-foreground">Nenhum produto encontrado com esses filtros.</p>
+        )}
       </div>
     </Panel>
   );
@@ -105,7 +142,10 @@ export function ProdutoDetalhe({
           <button
             key={t}
             onClick={() => setAba(t)}
-            className={cn("py-2 text-sm font-medium", aba === t ? "border-b-2 border-indigo-500 text-indigo-600" : "text-foreground/70")}
+            className={cn(
+              "py-2 text-sm font-medium",
+              aba === t ? "border-b-2 border-indigo-500 text-indigo-600" : "text-foreground/70",
+            )}
           >
             {t}
           </button>
@@ -118,7 +158,10 @@ export function ProdutoDetalhe({
         {aba === "Preços" &&
           planos.map((p) => (
             <div key={p.id} className="py-3">
-              <button className="flex w-full items-center text-left" onClick={() => setAberto(aberto === p.id ? null : p.id)}>
+              <button
+                className="flex w-full items-center text-left"
+                onClick={() => setAberto(aberto === p.id ? null : p.id)}
+              >
                 <div className="flex-1">
                   <div className="text-sm font-medium">
                     {p.nome} | {p.acomodacao} | {p.abrangencia}
@@ -129,14 +172,18 @@ export function ProdutoDetalhe({
                     </span>
                     <span className="flex items-center gap-1">
                       <Wallet className="h-3" />
-                      {p.coparticipacao === "Com coparticipação" ? `Coparticipação ${p.percentualCopart}%` : "Sem coparticipação"}
+                      {p.coparticipacao === "Com coparticipação"
+                        ? `Coparticipação ${p.percentualCopart}%`
+                        : "Sem coparticipação"}
                     </span>
                   </div>
                 </div>
                 <ChevronDown className={cn("h-4 transition-transform", aberto === p.id && "rotate-180")} />
               </button>
-              {(
-                <table className={cn("mt-3 w-full text-sm animate-in fade-in-0 print:table", aberto !== p.id && "hidden")}>
+              {
+                <table
+                  className={cn("mt-3 w-full text-sm animate-in fade-in-0 print:table", aberto !== p.id && "hidden")}
+                >
                   <tbody>
                     {FAIXAS.map((f) => (
                       <tr key={f} className="border-t">
@@ -146,7 +193,7 @@ export function ProdutoDetalhe({
                     ))}
                   </tbody>
                 </table>
-              )}
+              }
             </div>
           ))}
         {aba === "Rede credenciada" &&
@@ -167,7 +214,9 @@ export function ProdutoDetalhe({
           <div className="space-y-2 py-2 text-sm text-muted-foreground">
             <p>Razão social: {op.razaoSocial}</p>
             <p>Registro (fictício): {op.registroAns}</p>
-            <p>IDSS: {op.idss.toFixed(4)} · Reajuste anual: {op.reajuste.toFixed(1)}%</p>
+            <p>
+              IDSS: {op.idss.toFixed(4)} · Reajuste anual: {op.reajuste.toFixed(1)}%
+            </p>
             <p>Carências, documentos e regras de contratação seriam exibidos aqui.</p>
           </div>
         )}

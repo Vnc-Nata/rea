@@ -72,10 +72,20 @@ export interface Cenario {
   id: string;
   planoId: string;
   comentario: string;
+  destaque?: boolean;
 }
 
+/** Opções de envio (menu ⋮ › Opções, rota ?d=flags no app de referência). */
+export interface OpcoesEnvio {
+  validade?: string; // AAAA-MM-DD; depois dela a proposta pública mostra "expirada"
+  valores: boolean;
+  rede: boolean;
+  maisInfo: boolean;
+}
+export const OPCOES_PADRAO: OpcoesEnvio = { valores: true, rede: true, maisInfo: true };
+
 export interface Evento {
-  tipo: "Criada" | "Enviada" | "Visualizada" | "Plano adicionado" | "Plano removido";
+  tipo: "Criada" | "Enviada" | "Visualizada" | "Plano adicionado" | "Plano removido" | "Duplicada";
   em: string;
   por: string;
 }
@@ -97,6 +107,9 @@ export interface Cotacao {
   filtro: FiltroCotacao;
   eventos: Evento[];
   visualizacoes: number;
+  opcoes?: OpcoesEnvio;
+  contato?: string;
+  negocio?: string;
 }
 
 export interface Perfil {
@@ -107,7 +120,32 @@ export interface Perfil {
   mensagemPadrao: string;
 }
 
+export interface Usuario {
+  id: string;
+  nome: string;
+  email: string;
+  perfil: "Administrador" | "Usuário";
+  equipeId?: string;
+  ativo: boolean;
+}
+
+export interface Equipe {
+  id: string;
+  nome: string;
+}
+
+export interface Conta {
+  corretora: { nome: string; cidade: string; facebook: string; instagram: string; linkedin: string; site: string };
+  usuarios: Usuario[];
+  equipes: Equipe[];
+  apiKey?: string;
+  operadorasHabilitadas: string[]; // vazio = todas
+  maisInfoRelevantes: boolean;
+  licencas: number;
+}
+
 export interface Db {
+  conta?: Conta;
   perfil: Perfil;
   operadoras: Operadora[];
   hospitais: Hospital[];

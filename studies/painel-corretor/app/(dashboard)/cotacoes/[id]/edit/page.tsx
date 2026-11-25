@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { CotacaoEditor } from "@/components/cotacao-editor";
+import { lerConta } from "@/lib/conta-db";
 import { readDb } from "@/lib/db";
 
 export default async function EditCotacao({
@@ -22,6 +23,7 @@ export default async function EditCotacao({
       hospitais={db.hospitais}
       mensagemPadrao={db.perfil.mensagemPadrao}
       drawer={d}
+      operadorasHabilitadas={lerConta(db).operadorasHabilitadas}
     />
   );
 }

@@ -1,22 +1,29 @@
 import { notFound } from "next/navigation";
 import { AnsHeader, BuscaAnsDetalhe } from "@/components/busca-ans";
+import { BuscaAnsRealDetalhe } from "@/components/busca-ans-real";
+import { lerBaseAns } from "@/lib/ans";
 import { readDb } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 
 export default async function BuscaAnsOperadora({
   params,
   searchParams,
 }: {
   params: Promise<{ registro: string }>;
-  searchParams: Promise<{ modalidade?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { registro } = await params;
-  const { modalidade } = await searchParams;
+  const sp = await searchParams;
+  const base = lerBaseAns();
+  if (base?.operadoras.some((o) => o.registroAns === registro))
+    return <BuscaAnsRealDetalhe base={base} registro={registro} sp={sp} />;
   const db = readDb();
   const op = db.operadoras.find((o) => o.registroAns === registro);
   if (!op) notFound();
   const planos = db.planos
     .filter((p) => p.operadoraId === op.id)
-    .sort((a, b) => Number(b.modalidade === modalidade) - Number(a.modalidade === modalidade));
+    .sort((a, b) => Number(b.modalidade === sp.modalidade) - Number(a.modalidade === sp.modalidade));
   return (
     <>
       <AnsHeader />

@@ -7,6 +7,13 @@ import type { Hospital, Operadora, Plano } from "@/lib/types";
 import { Comparativo } from "./cotacao-editor";
 import { Modal } from "./ui";
 
+export function Imprimir({ ativo }: { ativo: boolean }) {
+  useEffect(() => {
+    if (ativo) setTimeout(() => window.print(), 400);
+  }, [ativo]);
+  return null;
+}
+
 export function RegistrarVisualizacao({ cotacaoId, preview }: { cotacaoId: string; preview: boolean }) {
   const done = useRef(false);
   useEffect(() => {

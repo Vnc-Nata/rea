@@ -5,7 +5,7 @@ import { OperadoraLogo } from "@/components/brand";
 import { Comentario, CoparticipacaoDetalhes, RedeCards, RegistrarVisualizacao } from "@/components/proposta";
 import { buttonClass } from "@/lib/button";
 import { readDb } from "@/lib/db";
-import { FAIXAS, faixaLabel } from "@/lib/types";
+import { FAIXAS, OPCOES_PADRAO, faixaLabel } from "@/lib/types";
 import { numero, precoTotal, vidasPorFaixa } from "@/lib/utils";
 
 export default async function Cenario({
@@ -24,6 +24,7 @@ export default async function Cenario({
   if (!c || !cen || !plano) notFound();
   const op = db.operadoras.find((o) => o.id === plano.operadoraId)!;
   const vidas = vidasPorFaixa(c.grupos);
+  const o = c.opcoes ?? OPCOES_PADRAO;
   const tel = db.perfil.telefone.replace(/\D/g, "");
   const msg = `Olá, ${db.perfil.usuario}!\nTenho interesse neste plano de saúde. Pode me ajudar?\n\n${plano.nome} (${op.nome})`;
 
@@ -31,7 +32,9 @@ export default async function Cenario({
     <dl className="grid divide-y divide-border lg:grid-cols-2 lg:divide-y-0">
       <div className="border-border px-8 py-6 sm:border-t">
         <dt className="text-sm font-medium leading-6">
-          {plano.acomodacao === "Quarto Individual" ? "Quarto individual (apartamento)" : "Quarto coletivo (enfermaria)"}
+          {plano.acomodacao === "Quarto Individual"
+            ? "Quarto individual (apartamento)"
+            : "Quarto coletivo (enfermaria)"}
         </dt>
         <dd className="mt-1 text-sm leading-6 text-gray-500">
           {plano.acomodacao === "Quarto Individual"
@@ -41,7 +44,9 @@ export default async function Cenario({
       </div>
       <div className="border-border px-8 py-6 sm:border-t">
         <dt className="text-sm font-medium leading-6">
-          {plano.coparticipacao === "Com coparticipação" ? `Coparticipação ${plano.percentualCopart ?? ""}%` : "Sem coparticipação"}
+          {plano.coparticipacao === "Com coparticipação"
+            ? `Coparticipação ${plano.percentualCopart ?? ""}%`
+            : "Sem coparticipação"}
         </dt>
         <dd className="mt-1 text-sm leading-6 text-gray-500">
           {plano.coparticipacao === "Com coparticipação" ? (
@@ -91,28 +96,33 @@ export default async function Cenario({
               <OperadoraLogo op={op} className="text-4xl" />
             </div>
           </div>
-          <div className="hidden sm:grid">{detalhes}</div>
+          {o.maisInfo && <div className="hidden sm:grid">{detalhes}</div>}
         </div>
 
         <div className="sticky top-6 flex w-full flex-col gap-4 self-start md:w-96">
           <div className="rounded-sm bg-background p-6 shadow-sm">
             <h2 className="truncate text-base font-semibold">Plano {plano.nome}</h2>
             <Comentario cotacaoId={c.id} cenarioId={cen.id} value={cen.comentario} editavel={!!preview} />
-            <div className="mb-6 mt-2 divide-y divide-border">
-              {FAIXAS.filter((f) => vidas[f] > 0).map((f) => (
-                <dl key={f} className="flex py-2 text-sm">
-                  <dt>{faixaLabel(f)}</dt>
-                  <dd className="ml-auto">
-                    <span className="text-foreground/50">{vidas[f]} x </span>R$ {numero(plano.precos[f])}
-                  </dd>
-                </dl>
-              ))}
-            </div>
-            <div className="mb-4 flex items-end justify-end gap-1">
-              <span>R$</span>
-              <span className="text-2xl font-semibold text-primary">{numero(precoTotal(plano, c.grupos))}</span>
-              <span className="text-xs">/mês</span>
-            </div>
+            {o.valores && (
+              <>
+                <div className="mb-6 mt-2 divide-y divide-border">
+                  {FAIXAS.filter((f) => vidas[f] > 0).map((f) => (
+                    <dl key={f} className="flex py-2 text-sm">
+                      <dt>{faixaLabel(f)}</dt>
+                      <dd className="ml-auto">
+                        <span className="text-foreground/50">{vidas[f]} x </span>
+                        R$ {numero(plano.precos[f])}
+                      </dd>
+                    </dl>
+                  ))}
+                </div>
+                <div className="mb-4 flex items-end justify-end gap-1">
+                  <span>R$</span>
+                  <span className="text-2xl font-semibold text-primary">{numero(precoTotal(plano, c.grupos))}</span>
+                  <span className="text-xs">/mês</span>
+                </div>
+              </>
+            )}
             <a
               href={`https://api.whatsapp.com/send?phone=55${tel}&text=${encodeURIComponent(msg)}`}
               target="_blank"
@@ -122,8 +132,8 @@ export default async function Cenario({
             </a>
             <p className="mt-1 text-xs">Não há cobrança de taxa.</p>
           </div>
-          <RedeCards plano={plano} op={op} hospitais={db.hospitais} />
-          <div className="block rounded-sm bg-background shadow-sm sm:hidden">{detalhes}</div>
+          {o.rede && <RedeCards plano={plano} op={op} hospitais={db.hospitais} />}
+          {o.maisInfo && <div className="block rounded-sm bg-background shadow-sm sm:hidden">{detalhes}</div>}
         </div>
       </div>
     </>
