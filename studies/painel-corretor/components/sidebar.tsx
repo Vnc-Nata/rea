@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Briefcase, FolderOpen, LayoutGrid, Menu, Settings, User, Wallet, X } from "lucide-react";
+import { Bell, Briefcase, Database, FolderOpen, LayoutGrid, Menu, Settings, User, Wallet, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useState } from "react";
@@ -20,6 +20,7 @@ const LINKS = [
   { href: "/cotacoes", label: "Cotações", icon: Wallet },
   { href: "/busca-ans", label: "Busca ANS", icon: FolderOpen, beta: true },
   { href: "/produtos", label: "Produtos", icon: LayoutGrid },
+  { href: "/base-ans", label: "Base ANS", icon: Database, beta: true },
   { href: "/crm/contatos", label: "Contatos", icon: User },
   { href: "/crm/negocios", label: "Negócios", icon: Briefcase },
 ];

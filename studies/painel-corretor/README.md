@@ -37,8 +37,41 @@ Os dados ficam em `data/db.json`, criado na primeira requisição a partir de
 | Configurações | `/conta/perfil` | Nome, telefone e mensagem padrão (usada no "Enviar") |
 | Tema | qualquer tela | Claro/escuro, salvo no navegador |
 
+| Base ANS | `/base-ans` | Planos ativos das operadoras escolhidas com o VCM por faixa etária da ANS, filtros (operadora, contratação, acomodação, coparticipação, UF, município) e estimativa pelo número de vidas em cada faixa |
+
 Contatos e Negócios (CRM), as demais seções de Configurações, notificações push,
 assistente de IA e login são apenas indicados, não recriados.
+
+## Base ANS (dados reais e públicos)
+
+A tela **Base ANS** usa os [dados abertos da ANS](https://dadosabertos.ans.gov.br/FTP/PDA/),
+importados por `scripts/importar-ans.mjs` para as operadoras listadas em
+[`data/ans/operadoras-alvo.json`](data/ans/operadoras-alvo.json) (hoje Amil,
+Bradesco Saúde, SulAmérica, Porto Saúde, Alice e Hapvida NotreDame, por
+registro ANS). Para incluir outra operadora, acrescente o registro ANS dela nesse
+arquivo.
+
+```bash
+npm run importar-ans -- --uf SP          # municípios de SP; demais UFs só como sigla
+npm run importar-ans -- --uf SP,RJ,MG
+npm run importar-ans -- --sem-area       # mais rápido: pula a área de comercialização
+```
+
+A importação baixa cerca de 1,2 GB (a área de comercialização sozinha tem ~1 GB)
+e grava `data/ans/base.json`, que não vai para o Git. Rode de novo quando quiser
+atualizar; a ANS publica a base de produtos diariamente e o VCM a cada nova nota
+técnica.
+
+| Arquivo da ANS | O que vira |
+| --- | --- |
+| `operadoras_de_plano_de_saude_ativas/Relatorio_cadop.csv` | Operadoras (CNPJ, razão social, modalidade) |
+| `caracteristicas_produtos_saude_suplementar-008/…csv` | Planos com situação "Ativo": contratação, segmentação, abrangência, acomodação, coparticipação |
+| `nota_tecnica_ntrp_vcm_faixa_etaria/…zip` | VCM, mínimo e máximo nas 10 faixas, da nota técnica mais recente de cada plano |
+| `area_comercializacao_planos_ntrp/…csv` | UFs onde cada plano é vendido e, nas UFs pedidas com `--uf`, os municípios |
+
+> **VCM não é preço de venda.** É o valor comercial que a operadora declarou à
+> ANS na nota técnica do plano, com faixa permitida de mínimo e máximo. Serve
+> para estimar e conferir; a cotação final usa a tabela de venda da operadora.
 
 ## Estrutura
 
@@ -63,3 +96,4 @@ mesmos tokens de cor do app de referência, ícones lucide-react.
 ![Editor de cotação](docs/editor.png)
 ![Seletor de planos](docs/seletor.png)
 ![Proposta do cliente](docs/proposta.png)
+![Base ANS](docs/base-ans.png)
