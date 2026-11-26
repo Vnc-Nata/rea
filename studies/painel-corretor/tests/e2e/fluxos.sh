@@ -8,7 +8,7 @@
 # Roda com a base de teste (tests/fixtures) ou com a base real/grande: só confere formatos (ex.: "N planos", "R$ ..."),
 # não valores das fixtures. Precisa da Amil (registro 326305) comercializada em São Caetano do Sul - SP.
 # Não depende de cotações prévias. Antes do navegador, aquece as páginas com curl (a primeira compilação do Next.js
-# e a leitura de uma base grande podem passar de 25 s); a primeira abertura espera até 60 s (E2E_TIMEOUT_LENTO, ms).
+# e a leitura de uma base grande podem passar de 25 s); todo comando espera até 60 s (E2E_TIMEOUT, ms).
 # Para usar outro Chromium: AGENT_BROWSER_EXECUTABLE_PATH=/caminho/chrome.
 # Base grande sintética: node scripts/gerar-base-grande.mjs /tmp/base-grande && ANS_DIR=/tmp/base-grande npx next dev -p 3105
 # Não suba um segundo `next dev` na mesma pasta de outro já rodando: os dois escrevem em .next e se quebram (use uma
@@ -45,11 +45,13 @@ ab() { agent-browser --session "$SESSION" "$@"; }
 # Roda o agent-browser e guarda a saída em $SAIDA (devolve o código de saída dele).
 # A saída vai para um arquivo, nunca para um pipe/$(...): no Windows (Git Bash) o daemon do agent-browser herda o
 # pipe e a captura nunca recebe EOF (o script trava no primeiro comando).
-# Espera padrão (ms) de cada comando; o daemon guarda o último valor recebido, então todo comando manda o seu.
-ESPERA="${E2E_TIMEOUT:-25000}"
+# Espera padrão (ms), uma só para a execução inteira: o agent-browser reabre o navegador (página em branco)
+# quando AGENT_BROWSER_DEFAULT_TIMEOUT muda entre dois comandos da mesma sessão.
+ESPERA="${E2E_TIMEOUT:-60000}"
+export AGENT_BROWSER_DEFAULT_TIMEOUT="$ESPERA"
 capt() {
   local rc
-  AGENT_BROWSER_DEFAULT_TIMEOUT="$ESPERA" ab "$@" </dev/null >"$TMP_E2E/saida" 2>&1
+  ab "$@" </dev/null >"$TMP_E2E/saida" 2>&1
   rc=$?
   # Sem o aviso que o agent-browser imprime quando a espera padrão muda.
   SAIDA=$(grep -v '^⚠ default-timeout' "$TMP_E2E/saida")
@@ -75,12 +77,8 @@ passo() {
   capt "$@" || falha "agent-browser $* -> $SAIDA"
 }
 
-# Como passo, com espera longa (primeira compilação de uma página, base grande).
-lento() {
-  ESPERA="${E2E_TIMEOUT_LENTO:-60000}"
-  passo "$@"
-  ESPERA="${E2E_TIMEOUT:-25000}"
-}
+# Marca os passos que podem demorar (primeira compilação, base grande); usam a mesma espera única.
+lento() { passo "$@"; }
 
 ok() { PASSOS=$((PASSOS + 1)); echo "ok  $1"; }
 
