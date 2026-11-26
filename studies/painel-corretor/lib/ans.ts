@@ -52,15 +52,65 @@ export interface BaseAns {
   planos: PlanoAns[];
 }
 
+/** Rede hospitalar por plano (rede.json, gerado junto com a base). */
+export interface RedeAns {
+  geradoEm: string;
+  hospitais: Record<string, { nome: string; municipio: string; uf: string; classe: string; urgencia: boolean }>;
+  porPlano: Record<string, string[]>; // id do plano → CNES
+}
+
+/** IDSS e reajuste por registro de operadora (indicadores.json). */
+export interface IndicadoresAns {
+  geradoEm: string;
+  porOperadora: Record<
+    string,
+    { idss?: number; idssAno?: number; reajuste?: number; reajusteAnterior?: number; ciclo?: number }
+  >;
+}
+
 // ANS_DIR (relativo a process.cwd()) permite apontar para outra pasta, ex.: tests/fixtures.
-const ARQ = path.join(path.resolve(process.cwd(), process.env.ANS_DIR ?? path.join("data", "ans")), "base.json");
-let cache: { mtime: number; base: BaseAns } | null = null;
+// Resolvido a cada leitura para que testes possam trocar a pasta.
+export function dirAns(): string {
+  return path.resolve(process.cwd(), process.env.ANS_DIR ?? path.join("data", "ans"));
+}
+
+const cache = new Map<string, { mtime: number; dado: unknown }>();
+
+/** Lê um JSON da pasta da ANS com cache por data de modificação; null se não existir. */
+function lerJson<T>(nome: string): T | null {
+  const arq = path.join(dirAns(), nome);
+  let mtime: number;
+  try {
+    mtime = fs.statSync(arq).mtimeMs;
+  } catch {
+    return null;
+  }
+  const c = cache.get(arq);
+  if (c && c.mtime === mtime) return c.dado as T;
+  const dado = JSON.parse(fs.readFileSync(arq, "utf8")) as T;
+  cache.set(arq, { mtime, dado });
+  return dado;
+}
+
+/** mtime do arquivo (0 se não existir), para chaves de cache derivadas. */
+export function mtimeAns(nome: string): number {
+  try {
+    return fs.statSync(path.join(dirAns(), nome)).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
 
 export function lerBaseAns(): BaseAns | null {
-  if (!fs.existsSync(ARQ)) return null;
-  const mtime = fs.statSync(ARQ).mtimeMs;
-  if (!cache || cache.mtime !== mtime) cache = { mtime, base: JSON.parse(fs.readFileSync(ARQ, "utf8")) };
-  return cache.base;
+  return lerJson<BaseAns>("base.json");
+}
+
+export function lerRedeAns(): RedeAns | null {
+  return lerJson<RedeAns>("rede.json");
+}
+
+export function lerIndicadoresAns(): IndicadoresAns | null {
+  return lerJson<IndicadoresAns>("indicadores.json");
 }
 
 export interface FiltroAns {

@@ -93,7 +93,7 @@ export function BuscaAnsDetalhe({ op, planos, hospitais }: { op: Operadora; plan
   const [planoId, setPlanoId] = useState(planos[0]?.id);
   const [aba, setAba] = useState<"Preços" | "Abrangência" | "Rede Credenciada">("Preços");
   const plano = planos.find((p) => p.id === planoId) ?? planos[0];
-  const diff = op.reajuste - op.reajusteAnterior;
+  const diff = (op.reajuste ?? 0) - (op.reajusteAnterior ?? 0);
   return (
     <div className="flex flex-col gap-4 sm:flex-row">
       <div className="space-y-4 sm:w-[300px]">
@@ -113,9 +113,9 @@ export function BuscaAnsDetalhe({ op, planos, hospitais }: { op: Operadora; plan
         <Panel className="space-y-3 p-4">
           <div className="font-medium">IDSS</div>
           <p className="truncate text-xs text-muted-foreground">Índice de Desempenho da Saúde Suplementar</p>
-          <div className="text-2xl font-bold text-primary">{op.idss.toFixed(4)}</div>
+          <div className="text-2xl font-bold text-primary">{op.idss != null ? op.idss.toFixed(4) : "—"}</div>
           <div className="h-2 rounded-full bg-muted">
-            <div className="h-2 rounded-full bg-yellow-400" style={{ width: `${op.idss * 100}%` }} />
+            <div className="h-2 rounded-full bg-yellow-400" style={{ width: `${(op.idss ?? 0) * 100}%` }} />
           </div>
           <div className="flex justify-between text-xs text-muted-foreground">
             Clique para ver detalhes <ArrowRight className="h-4" />
@@ -125,7 +125,9 @@ export function BuscaAnsDetalhe({ op, planos, hospitais }: { op: Operadora; plan
           <div className="font-medium">Reajuste Anual</div>
           <div className="flex items-end">
             <div>
-              <div className="text-2xl font-bold text-primary">{op.reajuste.toFixed(1)}%</div>
+              <div className="text-2xl font-bold text-primary">
+                {op.reajuste != null ? `${op.reajuste.toFixed(1)}%` : "—"}
+              </div>
               <div className="text-xs text-muted-foreground">Índice atual</div>
             </div>
             <div className={cn("ml-auto text-right text-xs", diff <= 0 ? "text-emerald-600" : "text-red-600")}>
@@ -174,8 +176,10 @@ export function BuscaAnsDetalhe({ op, planos, hospitais }: { op: Operadora; plan
                   {FAIXAS.map((f) => (
                     <tr key={f} className="border-t">
                       <td className="p-2">{faixaLabel(f)}</td>
-                      <td className="p-2 text-center">{moeda(plano.precos[f])}</td>
-                      <td className="p-2 text-center">{moeda(plano.precos[f] * 1.3)}</td>
+                      <td className="p-2 text-center">{plano.precos[f] != null ? moeda(plano.precos[f]!) : "—"}</td>
+                      <td className="p-2 text-center">
+                        {plano.precos[f] != null ? moeda(plano.precos[f]! * 1.3) : "—"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

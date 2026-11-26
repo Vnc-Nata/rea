@@ -40,9 +40,17 @@ export function vidasPorFaixa(grupos: Grupo[]) {
   return out;
 }
 
-export function precoTotal(plano: Plano, grupos: Grupo[]) {
+/** Σ vidas × preço da faixa, × (1 + IOF) em seguradoras. Faixa sem preço conta 0 (ver precoDisponivel). */
+export function precoTotal(plano: Plano, grupos: Grupo[]): number {
   const v = vidasPorFaixa(grupos);
-  return FAIXAS.reduce((s, f) => s + v[f] * plano.precos[f], 0);
+  const soma = FAIXAS.reduce((s, f) => s + v[f] * (plano.precos[f] ?? 0), 0);
+  return Math.round(soma * (1 + (plano.iof ?? 0)) * 100) / 100;
+}
+
+/** false se alguma faixa com vidas não tem preço. */
+export function precoDisponivel(plano: Plano, grupos: Grupo[]): boolean {
+  const v = vidasPorFaixa(grupos);
+  return FAIXAS.every((f) => !v[f] || plano.precos[f] != null);
 }
 
 export function idade(dataIso: string) {

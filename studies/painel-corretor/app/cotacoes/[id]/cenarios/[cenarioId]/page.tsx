@@ -111,7 +111,7 @@ export default async function Cenario({
                       <dt>{faixaLabel(f)}</dt>
                       <dd className="ml-auto">
                         <span className="text-foreground/50">{vidas[f]} x </span>
-                        R$ {numero(plano.precos[f])}
+                        {plano.precos[f] != null ? `R$ ${numero(plano.precos[f]!)}` : "—"}
                       </dd>
                     </dl>
                   ))}

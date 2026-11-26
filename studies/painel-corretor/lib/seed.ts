@@ -34,14 +34,14 @@ export const CIDADES = [
 
 // Operadoras FICTÍCIAS. Nomes, registros e índices são inventados.
 const OPERADORAS: Operadora[] = [
-  { id: "op-aurora", nome: "Aurora Saúde", razaoSocial: "AURORA SAÚDE OPERADORA LTDA.", registroAns: "900101", cor: "#db2777", idss: 0.5292, reajuste: 11.2, reajusteAnterior: 11.1 },
-  { id: "op-vitalis", nome: "Vitalis", razaoSocial: "VITALIS ASSISTÊNCIA MÉDICA S.A.", registroAns: "900202", cor: "#2563eb", idss: 0.7811, reajuste: 9.6, reajusteAnterior: 12.4 },
-  { id: "op-horizonte", nome: "Horizonte Med", razaoSocial: "HORIZONTE MED PLANOS DE SAÚDE LTDA.", registroAns: "900303", cor: "#ea580c", idss: 0.6904, reajuste: 13.9, reajusteAnterior: 14.2 },
-  { id: "op-serena", nome: "Serena Care", razaoSocial: "SERENA CARE SEGURO SAÚDE S.A.", registroAns: "900404", cor: "#0d9488", idss: 0.8423, reajuste: 8.1, reajusteAnterior: 9.0 },
-  { id: "op-pulsar", nome: "Pulsar", razaoSocial: "PULSAR SAÚDE INTEGRADA LTDA.", registroAns: "900505", cor: "#7c3aed", idss: 0.6012, reajuste: 15.4, reajusteAnterior: 13.0 },
-  { id: "op-alvorada", nome: "Alvorada Vida", razaoSocial: "ALVORADA VIDA COOPERATIVA MÉDICA", registroAns: "900606", cor: "#16a34a", idss: 0.7355, reajuste: 10.7, reajusteAnterior: 10.9 },
-  { id: "op-norte", nome: "NorteSul Saúde", razaoSocial: "NORTESUL SAÚDE S.A.", registroAns: "900707", cor: "#dc2626", idss: 0.5577, reajuste: 12.3, reajusteAnterior: 11.8 },
-  { id: "op-sorriso", nome: "Sorriso Pleno", razaoSocial: "SORRISO PLENO ODONTOLOGIA LTDA.", registroAns: "900808", cor: "#0891b2", idss: 0.8102, reajuste: 6.5, reajusteAnterior: 7.2 },
+  { id: "op-aurora", nome: "Aurora Saúde", sigla: "AU", razaoSocial: "AURORA SAÚDE OPERADORA LTDA.", registroAns: "900101", cor: "#db2777", idss: 0.5292, reajuste: 11.2, reajusteAnterior: 11.1 },
+  { id: "op-vitalis", nome: "Vitalis", sigla: "VI", razaoSocial: "VITALIS ASSISTÊNCIA MÉDICA S.A.", registroAns: "900202", cor: "#2563eb", idss: 0.7811, reajuste: 9.6, reajusteAnterior: 12.4 },
+  { id: "op-horizonte", nome: "Horizonte Med", sigla: "HO", razaoSocial: "HORIZONTE MED PLANOS DE SAÚDE LTDA.", registroAns: "900303", cor: "#ea580c", idss: 0.6904, reajuste: 13.9, reajusteAnterior: 14.2 },
+  { id: "op-serena", nome: "Serena Care", sigla: "SE", razaoSocial: "SERENA CARE SEGURO SAÚDE S.A.", registroAns: "900404", cor: "#0d9488", idss: 0.8423, reajuste: 8.1, reajusteAnterior: 9.0 },
+  { id: "op-pulsar", nome: "Pulsar", sigla: "PU", razaoSocial: "PULSAR SAÚDE INTEGRADA LTDA.", registroAns: "900505", cor: "#7c3aed", idss: 0.6012, reajuste: 15.4, reajusteAnterior: 13.0 },
+  { id: "op-alvorada", nome: "Alvorada Vida", sigla: "AL", razaoSocial: "ALVORADA VIDA COOPERATIVA MÉDICA", registroAns: "900606", cor: "#16a34a", idss: 0.7355, reajuste: 10.7, reajusteAnterior: 10.9 },
+  { id: "op-norte", nome: "NorteSul Saúde", sigla: "NO", razaoSocial: "NORTESUL SAÚDE S.A.", registroAns: "900707", cor: "#dc2626", idss: 0.5577, reajuste: 12.3, reajusteAnterior: 11.8 },
+  { id: "op-sorriso", nome: "Sorriso Pleno", sigla: "SO", razaoSocial: "SORRISO PLENO ODONTOLOGIA LTDA.", registroAns: "900808", cor: "#0891b2", idss: 0.8102, reajuste: 6.5, reajusteAnterior: 7.2 },
 ];
 
 const HOSPITAIS: Hospital[] = [
@@ -126,6 +126,7 @@ function gerarPlanos(): Plano[] {
           abrangencia: linha.fator >= 1.35 ? "Nacional" : linha.fator >= 1 ? "Estadual" : "Grupo de municípios",
           cidades,
           precos,
+          origemPreco: "ficticio",
           rede,
           laboratorios: dental ? 0 : Math.round(40 + r() * 160),
         });

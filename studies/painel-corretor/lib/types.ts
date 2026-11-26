@@ -27,9 +27,12 @@ export interface Operadora {
   razaoSocial: string;
   registroAns: string;
   cor: string; // cor usada no "logotipo" textual
-  idss: number;
-  reajuste: number; // % reajuste anual atual
-  reajusteAnterior: number;
+  sigla: string; // 2 letras do selo quando não há logo
+  logo?: string; // caminho público do ícone (ex.: /logos/326305.png)
+  seguradora?: boolean; // modalidade ANS "Seguradora…": total com +2,38% de IOF
+  idss?: number;
+  reajuste?: number; // % reajuste anual atual
+  reajusteAnterior?: number;
 }
 
 export interface Hospital {
@@ -58,7 +61,12 @@ export interface Plano {
   aceitaMei: boolean;
   abrangencia: "Municipal" | "Grupo de municípios" | "Estadual" | "Nacional";
   cidades: string[];
-  precos: Record<Faixa, number>;
+  precos: Record<Faixa, number | null>; // null = sem preço nesta faixa
+  iof?: number; // fração somada ao total (0.0238 em seguradoras)
+  origemPreco: "tabela" | "ans" | "ficticio";
+  vigencia?: string; // vigência da tabela de venda (ISO)
+  codigoAns?: string; // código do produto na ANS
+  variante?: string; // variante de abrangência da nota técnica usada no VCM
   rede: RedeItem[];
   laboratorios: number;
 }
@@ -142,6 +150,7 @@ export interface Conta {
   operadorasHabilitadas: string[]; // vazio = todas
   maisInfoRelevantes: boolean;
   licencas: number;
+  ajustes?: Record<string, number>; // id da operadora → ajuste % sobre o VCM
 }
 
 export interface Db {

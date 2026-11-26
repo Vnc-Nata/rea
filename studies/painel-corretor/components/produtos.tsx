@@ -188,7 +188,7 @@ export function ProdutoDetalhe({
                     {FAIXAS.map((f) => (
                       <tr key={f} className="border-t">
                         <td className="py-1.5">{faixaLabel(f)}</td>
-                        <td className="py-1.5 text-right">{moeda(p.precos[f])}</td>
+                        <td className="py-1.5 text-right">{p.precos[f] != null ? moeda(p.precos[f]!) : "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -215,7 +215,8 @@ export function ProdutoDetalhe({
             <p>Razão social: {op.razaoSocial}</p>
             <p>Registro (fictício): {op.registroAns}</p>
             <p>
-              IDSS: {op.idss.toFixed(4)} · Reajuste anual: {op.reajuste.toFixed(1)}%
+              IDSS: {op.idss != null ? op.idss.toFixed(4) : "—"} · Reajuste anual:{" "}
+              {op.reajuste != null ? `${op.reajuste.toFixed(1)}%` : "—"}
             </p>
             <p>Carências, documentos e regras de contratação seriam exibidos aqui.</p>
           </div>
