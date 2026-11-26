@@ -292,7 +292,7 @@ function NovoCaso({ cidades }: { cidades: string[] }) {
       }
     });
   return (
-    <Panel className="grid gap-4 p-4">
+    <Panel className="grid gap-4 p-4" data-novo-caso>
       <h2 className="font-semibold">Novo caso</h2>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="grid gap-1">
