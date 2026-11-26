@@ -7,7 +7,7 @@ import { buscarPlanos } from "@/app/actions";
 import type { Selecao } from "@/lib/selecao";
 import type { Hospital, Modalidade, Operadora, Plano, Segmento } from "@/lib/types";
 import { FAIXAS, faixaLabel } from "@/lib/types";
-import { cn, moeda } from "@/lib/utils";
+import { cn, moeda, numero } from "@/lib/utils";
 import { OperadoraLogo, OrigemPreco } from "./brand";
 import { Button, Input, Panel, ToggleGroup } from "./ui";
 
@@ -239,6 +239,13 @@ export function ProdutoDetalhe({
                         <td className="py-1.5 text-right">{p.precos[f] != null ? moeda(p.precos[f]!) : "—"}</td>
                       </tr>
                     ))}
+                    {!!p.iof && (
+                      <tr className="border-t">
+                        <td colSpan={2} className="py-1.5 text-xs text-muted-foreground" data-nota-iof>
+                          Valores por vida. +{numero(p.iof * 100, 2)}% de IOF no total
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               }
