@@ -1,6 +1,7 @@
 import "server-only";
 import fs from "node:fs";
 import path from "node:path";
+import { lerNumeroBR } from "./numeros";
 
 // Tabelas de venda (preço por faixa etária) lidas de CSVs em data/tabelas (ver README.md de lá).
 // Os preços vêm das tabelas comerciais das operadoras, preenchidas à mão ou por importação.
@@ -49,7 +50,7 @@ const COLUNAS_FAIXA = CABECALHO_TABELAS.slice(7);
 const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
 export function normalizarRegistro(v: string): string {
-  const d = v.replace(/\D/g, "");
+  const d = v.replace(/\D/g, "").replace(/^0+/, "");
   return d ? d.padStart(6, "0") : "";
 }
 
@@ -74,14 +75,8 @@ function parseVigencia(v: string): string | null {
   return `${a}-${mes}-${d}`;
 }
 
-// "1.034,80" -> 1034.8; "1034.80" -> 1034.8; "" -> null; inválido -> NaN
-function parsePreco(v: string): number | null {
-  const s = v.replace(/R\$|\s/g, "");
-  if (!s) return null;
-  const norm = s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s;
-  if (!/^\d+(\.\d+)?$/.test(norm)) return NaN;
-  return Number(norm);
-}
+// "1.034,80" / "1034.80" / "1.034" -> número; "" -> null; inválido -> NaN (mesma regra de lerValorBR)
+const parsePreco = lerNumeroBR;
 
 // Divide uma linha CSV com ";" respeitando aspas.
 function dividir(linha: string): string[] {
@@ -167,6 +162,28 @@ function lerArquivo(arquivo: string, texto: string, tabelas: TabelaVenda[], erro
   }
 }
 
+// O preço da tabela vale para o plano em todas as cidades dele (uf/município só restringem o casamento). Linhas
+// do mesmo plano com a mesma vigência (ex.: uma por cidade) não se somam: tabelaPara usa a primeira. Avisa.
+function avisarRepetidas(tabelas: TabelaVenda[], erros: ErroTabela[]) {
+  const primeira = new Map<string, TabelaVenda>();
+  for (const t of tabelas) {
+    const plano = t.codigoAns ? `c:${t.codigoAns}` : t.nomePlano ? `n:${t.registro}:${semAcento(t.nomePlano)}` : "";
+    if (!plano) continue;
+    const chave = `${plano}|${t.vigencia}`;
+    const p = primeira.get(chave);
+    if (!p) {
+      primeira.set(chave, t);
+      continue;
+    }
+    const onde = p.arquivo === t.arquivo ? `linha ${p.linha}` : `${p.arquivo}, linha ${p.linha}`;
+    erros.push({
+      arquivo: t.arquivo,
+      linha: t.linha,
+      motivo: `várias linhas para o mesmo plano e vigência; usada a primeira (${onde})`,
+    });
+  }
+}
+
 const cache = new Map<string, { chave: string; r: { tabelas: TabelaVenda[]; erros: ErroTabela[] } }>();
 // Mesmo objeto sempre que a pasta não existe: quem usa a identidade como chave de cache não reconstrói à toa.
 const VAZIO: { tabelas: TabelaVenda[]; erros: ErroTabela[] } = Object.freeze({
@@ -195,6 +212,7 @@ export function lerTabelas(dir?: string): { tabelas: TabelaVenda[]; erros: ErroT
   const tabelas: TabelaVenda[] = [];
   const erros: ErroTabela[] = [];
   for (const n of nomes) lerArquivo(n, fs.readFileSync(path.join(base, n), "utf8"), tabelas, erros);
+  avisarRepetidas(tabelas, erros);
   const r = { tabelas, erros };
   cache.set(base, { chave, r });
   return r;

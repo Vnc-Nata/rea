@@ -1,3 +1,4 @@
+import { lerNumeroBR } from "./numeros";
 import { FAIXAS, type Faixa } from "./types";
 
 // Regras puras da tela "Comparar com o Painel".
@@ -56,15 +57,7 @@ export function resumoVidas(vidas: Record<Faixa, number>): string {
 
 /** Valor em pt-BR: com vírgula, pontos são milhares; sem vírgula, um ponto final seguido de 1-2 dígitos é decimal. */
 export function lerValorBR(entrada: string): number | null {
-  const s = entrada.trim().replace(/^R\$\s*/, "");
-  if (!s) return null;
-  let n: string;
-  if (s.includes(",")) {
-    if (!/^\d{1,3}(\.\d{3})*,\d{1,2}$|^\d+,\d{1,2}$/.test(s)) return NaN;
-    n = s.replace(/\./g, "").replace(",", ".");
-  } else if (/^\d+\.\d{1,2}$/.test(s)) n = s;
-  else if (/^\d{1,3}(\.\d{3})+$|^\d+$/.test(s)) n = s.replace(/\./g, "");
-  else return NaN;
-  const v = Number(n);
+  const v = lerNumeroBR(entrada);
+  if (v === null) return null;
   return v > 0 ? v : NaN;
 }

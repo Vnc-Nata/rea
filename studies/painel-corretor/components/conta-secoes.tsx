@@ -434,7 +434,7 @@ export function Preferencias({
       {errosTabelas.length > 0 && (
         <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
           <div className="font-medium">
-            {errosTabelas.length} linha(s) de tabela de venda ignorada(s) em data/tabelas
+            {errosTabelas.length} aviso(s) nas tabelas de venda em data/tabelas (linhas ignoradas ou repetidas)
           </div>
           <ul className="mt-1 max-h-40 list-disc overflow-auto pl-5 text-xs">
             {errosTabelas.map((e, i) => (
