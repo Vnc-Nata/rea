@@ -44,7 +44,8 @@ export function filtrarSelecao(
 }
 
 /**
- * Operadoras habilitadas de fato: a lista da conta; vazia → no catálogo ANS, as operadoras-alvo
+ * Operadoras habilitadas de fato: a lista da conta, só com ids do catálogo atual (uma lista salva com
+ * ids fictícios não vale no catálogo ANS); vazia → no catálogo ANS, as operadoras-alvo
  * (data/ans/operadoras-alvo.json) presentes no catálogo; senão todas.
  */
 export function habilitadasEfetivas(
@@ -53,12 +54,14 @@ export function habilitadasEfetivas(
   operadoras: Operadora[],
   registrosAlvo: string[],
 ): string[] {
-  if (daConta?.length) return daConta;
   const todas = operadoras.map((o) => o.id);
+  const ids = new Set(todas);
+  const validas = (daConta ?? []).filter((id) => ids.has(id));
+  if (validas.length) return validas;
   if (fonte !== "ans") return todas;
   const alvo = new Set(registrosAlvo);
-  const ids = operadoras.filter((o) => alvo.has(o.registroAns)).map((o) => o.id);
-  return ids.length ? ids : todas;
+  const doAlvo = operadoras.filter((o) => alvo.has(o.registroAns)).map((o) => o.id);
+  return doAlvo.length ? doAlvo : todas;
 }
 
 /** Cidade do filtro se existe no catálogo; senão "São Paulo - SP" (se houver) ou a primeira. */

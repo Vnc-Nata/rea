@@ -292,7 +292,7 @@ export async function updatePreferencias(operadorasHabilitadas: string[], maisIn
 /** Ajuste % sobre o VCM da operadora (Conta.ajustes); 0 remove o ajuste. */
 export async function aplicarAjuste(operadoraId: string, pct: number): Promise<Result> {
   if (!Number.isFinite(pct) || pct <= -100 || pct > 500)
-    return { success: false, error: "Informe um ajuste entre -99% e 500%." };
+    return { success: false, error: "Informe um ajuste maior que -100% e de até 500%." };
   const v = Math.round(pct * 100) / 100;
   comConta((conta) => {
     const ajustes = { ...(conta.ajustes ?? {}) };

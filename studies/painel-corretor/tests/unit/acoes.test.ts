@@ -95,6 +95,13 @@ test("habilitadasEfetivas: conta > alvo (ANS) > todas", () => {
   assert.deepEqual(habilitadasEfetivas(undefined, "ficticio", cat.operadoras, ["005711"]), ids);
 });
 
+test("habilitadasEfetivas: ids da conta fora do catálogo são ignorados", () => {
+  const ids = cat.operadoras.map((o) => o.id);
+  assert.deepEqual(habilitadasEfetivas(["op-aurora", "op-vitalis"], "ans", cat.operadoras, ["005711"]), ["ans-005711"]);
+  assert.deepEqual(habilitadasEfetivas(["op-aurora", "ans-326305"], "ans", cat.operadoras, ["005711"]), ["ans-326305"]);
+  assert.deepEqual(habilitadasEfetivas(["op-aurora"], "ficticio", cat.operadoras, []), ids);
+});
+
 test("cidadeValida: mantém se existe, senão São Paulo - SP, senão a primeira", () => {
   assert.equal(cidadeValida("Campinas - SP", cat.cidades), "Campinas - SP");
   assert.equal(cidadeValida("Goiânia - GO", cat.cidades), "São Paulo - SP");

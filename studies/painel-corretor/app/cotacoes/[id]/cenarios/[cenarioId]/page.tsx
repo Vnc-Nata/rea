@@ -13,7 +13,7 @@ import { buttonClass } from "@/lib/button";
 import { catalogo, operadoraPorId, planoPorId } from "@/lib/catalogo";
 import { readDb } from "@/lib/db";
 import { FAIXAS, OPCOES_PADRAO, faixaLabel } from "@/lib/types";
-import { numero, precoTotal, vidasPorFaixa } from "@/lib/utils";
+import { numero, precoDisponivel, precoTotal, vidasPorFaixa } from "@/lib/utils";
 
 export default async function Cenario({
   params,
@@ -150,11 +150,17 @@ export default async function Cenario({
                     </dl>
                   ) : null}
                 </div>
-                <div className="mb-4 flex items-end justify-end gap-1">
-                  <span>R$</span>
-                  <span className="text-2xl font-semibold text-primary">{numero(precoTotal(plano, c.grupos))}</span>
-                  <span className="text-xs">/mês</span>
-                </div>
+                {precoDisponivel(plano, c.grupos) ? (
+                  <div className="mb-4 flex items-end justify-end gap-1">
+                    <span>R$</span>
+                    <span className="text-2xl font-semibold text-primary">{numero(precoTotal(plano, c.grupos))}</span>
+                    <span className="text-xs">/mês</span>
+                  </div>
+                ) : (
+                  <p className="mb-4 text-right text-sm text-muted-foreground">
+                    Preço indisponível para esta distribuição
+                  </p>
+                )}
                 <OrigemPreco plano={plano} className="-mt-3 mb-4 block text-right" />
               </>
             )}

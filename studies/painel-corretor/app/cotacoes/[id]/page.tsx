@@ -6,7 +6,7 @@ import { buttonClass } from "@/lib/button";
 import { operadoraPorId, planoPorId } from "@/lib/catalogo";
 import { readDb } from "@/lib/db";
 import { OPCOES_PADRAO } from "@/lib/types";
-import { numero, precoTotal, totalVidas } from "@/lib/utils";
+import { numero, precoDisponivel, precoTotal, totalVidas } from "@/lib/utils";
 
 // Visão geral da proposta enviada ao cliente (link do botão "Enviar").
 export default async function Proposta({
@@ -80,7 +80,10 @@ export default async function Proposta({
                 </div>
               )}
               {!o.maisInfo && <div className="text-sm font-medium">{p.nome}</div>}
-              {o.valores && (
+              {o.valores && !precoDisponivel(p, c.grupos) && (
+                <div className="mt-auto text-sm text-muted-foreground">Preço indisponível para esta distribuição</div>
+              )}
+              {o.valores && precoDisponivel(p, c.grupos) && (
                 <div className="mt-auto flex items-end gap-1">
                   <span>R$</span>
                   <span className="text-2xl font-semibold text-primary">{numero(precoTotal(p, c.grupos))}</span>

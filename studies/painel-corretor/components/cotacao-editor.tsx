@@ -41,7 +41,7 @@ import type { Selecao } from "@/lib/selecao";
 import type { Cotacao, FiltroCotacao, Hospital, Modalidade, Operadora, Plano, Segmento } from "@/lib/types";
 import { FAIXAS, OPCOES_PADRAO, faixaDaIdade, faixaLabel } from "@/lib/types";
 import type { OpcoesEnvio } from "@/lib/types";
-import { cn, idade, numero, precoTotal, tempoRelativo, totalVidas, vidasPorFaixa } from "@/lib/utils";
+import { cn, idade, numero, precoDisponivel, precoTotal, tempoRelativo, totalVidas, vidasPorFaixa } from "@/lib/utils";
 import { OperadoraIcone, OperadoraLogo, OrigemPreco } from "./brand";
 import {
   Button,
@@ -150,7 +150,7 @@ export function CotacaoEditor({
                   key={c.id}
                   plano={plano}
                   op={opMap[plano.operadoraId]}
-                  total={precoTotal(plano, cotacao.grupos)}
+                  total={precoDisponivel(plano, cotacao.grupos) ? precoTotal(plano, cotacao.grupos) : null}
                   href={`/cotacoes/${cotacao.id}/cenarios/${c.id}?preview=1`}
                   onHospitais={() => abrir("comparativo")}
                   onRemove={() => onPlanoRemove(cotacao.id, c.id)}
@@ -284,7 +284,8 @@ function PlanoCard({
 }: {
   plano: Plano;
   op: Operadora;
-  total: number;
+  /** null quando falta preço em alguma faixa com vidas. */
+  total: number | null;
   href: string;
   onRemove: () => void;
   onHospitais: () => void;
@@ -342,11 +343,15 @@ function PlanoCard({
           </ul>
         </div>
         <div className="flex flex-col sm:gap-4">
-          <div className="mt-auto flex items-end justify-end gap-1 sm:justify-normal">
-            <span>R$</span>
-            <span className="text-2xl font-semibold text-primary">{numero(total)}</span>
-            <span className="text-xs">/mês</span>
-          </div>
+          {total == null ? (
+            <div className="mt-auto text-sm text-muted-foreground">Preço indisponível para esta distribuição</div>
+          ) : (
+            <div className="mt-auto flex items-end justify-end gap-1 sm:justify-normal">
+              <span>R$</span>
+              <span className="text-2xl font-semibold text-primary">{numero(total)}</span>
+              <span className="text-xs">/mês</span>
+            </div>
+          )}
           <OrigemPreco plano={plano} />
           <Link href={href} target="_blank" className={buttonClass({ variant: "outline" }, "w-32 sm:w-full")}>
             Ver detalhes
@@ -596,6 +601,9 @@ function SeletorPlanos({
     const f = { ...filtro, [k]: v };
     setFiltro(f);
     setOpSel(null);
+    // Planos e hospitais de outra região/modalidade não valem mais.
+    setSelecionados([]);
+    setHospPref([]);
     updateFiltro(cotacao.id, f);
   }
   const toggleExtra = (k: keyof typeof extra, v: string | boolean) =>

@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { ProdutoDetalhe } from "@/components/produtos";
 import { catalogo } from "@/lib/catalogo";
-import { precoTotal } from "@/lib/utils";
-import { vidasVazias } from "@/lib/types";
+import { precoDisponivel, precoTotal } from "@/lib/utils";
+import { vidasVazias, type Plano } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +25,9 @@ export default async function Produto({
   const op = cat.operadoras.find((o) => o.id === operadoraId);
   if (!op) notFound();
   const ficticio = cat.fonte === "ficticio";
-  // Ordena pelo preço de 1 vida na faixa 29-33 (referência simples para a lista).
+  // Ordena pelo preço de 1 vida na faixa 29-33 (referência simples); sem preço nessa faixa vai para o fim.
   const ref = [{ nome: "ref", vidas: { ...vidasVazias(), "29-33": 1 } }];
+  const chave = (p: Plano) => (precoDisponivel(p, ref) ? precoTotal(p, ref) : Infinity);
   const planos = cat.planos
     .filter(
       (p) =>
@@ -38,7 +39,7 @@ export default async function Produto({
         (!ficticio || !contratacao || p.contratacao === contratacao),
     )
     .map((p) => ({ ...p, cidades: [cidade] }))
-    .sort((a, b) => precoTotal(a, ref) - precoTotal(b, ref));
+    .sort((a, b) => chave(a) - chave(b));
   const hospIds = new Set(planos.flatMap((p) => p.rede.map((r) => r.hospitalId)));
   return (
     <ProdutoDetalhe
