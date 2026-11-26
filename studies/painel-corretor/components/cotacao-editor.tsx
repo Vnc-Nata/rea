@@ -582,43 +582,59 @@ function SeletorPlanos({
     };
   }, [open, filtro, gruposJson, todas]);
 
-  const planos = dados?.planos ?? [];
-  const operadoras = dados?.operadoras ?? [];
-  const hospitais = dados?.hospitais ?? [];
-  const base = planos.filter(
-    (p) =>
-      (!filtrosFicticios || !extra.mei || p.aceitaMei) &&
-      (!extra.acomodacao || p.acomodacao === extra.acomodacao) &&
-      (!extra.coparticipacao || p.coparticipacao === extra.coparticipacao) &&
-      (!filtrosFicticios || !extra.contratacao || p.contratacao === extra.contratacao),
+  const planos = useMemo(() => dados?.planos ?? [], [dados]);
+  const operadoras = useMemo(() => dados?.operadoras ?? [], [dados]);
+  const hospitais = useMemo(() => dados?.hospitais ?? [], [dados]);
+  const base = useMemo(
+    () =>
+      planos.filter(
+        (p) =>
+          (!filtrosFicticios || !extra.mei || p.aceitaMei) &&
+          (!extra.acomodacao || p.acomodacao === extra.acomodacao) &&
+          (!extra.coparticipacao || p.coparticipacao === extra.coparticipacao) &&
+          (!filtrosFicticios || !extra.contratacao || p.contratacao === extra.contratacao),
+      ),
+    [planos, filtrosFicticios, extra],
   );
-  const totais = new Map(base.map((p) => [p.id, precoTotal(p, cotacao.grupos)]));
+  const totais = useMemo(() => new Map(base.map((p) => [p.id, precoTotal(p, cotacao.grupos)])), [base, cotacao.grupos]);
   // Perfil do cliente: divide os planos da região em terços pelo preço total.
-  const ordenados = [...totais.values()].sort((a, b) => a - b);
-  const corte1 = ordenados[Math.floor(ordenados.length / 3)] ?? 0;
-  const corte2 = ordenados[Math.floor((ordenados.length * 2) / 3)] ?? 0;
+  const [corte1, corte2] = useMemo(() => {
+    const ordenados = [...totais.values()].sort((a, b) => a - b);
+    return [ordenados[Math.floor(ordenados.length / 3)] ?? 0, ordenados[Math.floor((ordenados.length * 2) / 3)] ?? 0];
+  }, [totais]);
   const perfilDe = (v: number): Perfil => (v < corte1 ? "Econômico" : v < corte2 ? "Intermediário" : "Premium");
   // Hospitais da rede dos planos filtrados (o servidor já manda só os da UF da cidade, em ordem alfabética).
-  const naRede = new Set(base.flatMap((p) => p.rede.map((r) => r.hospitalId)));
-  const buscaHosp = semAcento(textoHosp.trim());
-  const hospDisponiveis = hospitais.filter(
-    (h) =>
-      naRede.has(h.id) &&
-      !hospPref.includes(h.id) &&
-      (!buscaHosp || semAcento(`${h.nome} ${h.regiao}`).includes(buscaHosp)),
-  );
-  const filtrados = base.filter((p) => {
-    const v = totais.get(p.id)!;
-    return (
-      (perfil === "Indiferente" || perfilDe(v) === perfil) &&
-      (faixaValor.min == null || v >= faixaValor.min) &&
-      (faixaValor.max == null || v <= faixaValor.max) &&
-      hospPref.every((h) => p.rede.some((r) => r.hospitalId === h))
+  const naRede = useMemo(() => new Set(base.flatMap((p) => p.rede.map((r) => r.hospitalId))), [base]);
+  const hospDisponiveis = useMemo(() => {
+    const buscaHosp = semAcento(textoHosp.trim());
+    return hospitais.filter(
+      (h) =>
+        naRede.has(h.id) &&
+        !hospPref.includes(h.id) &&
+        (!buscaHosp || semAcento(`${h.nome} ${h.regiao}`).includes(buscaHosp)),
     );
-  });
-  const ops = operadoras.filter((o) => filtrados.some((p) => p.operadoraId === o.id));
+  }, [hospitais, naRede, hospPref, textoHosp]);
+  const filtrados = useMemo(
+    () =>
+      base.filter((p) => {
+        const v = totais.get(p.id)!;
+        return (
+          (perfil === "Indiferente" || perfilDe(v) === perfil) &&
+          (faixaValor.min == null || v >= faixaValor.min) &&
+          (faixaValor.max == null || v <= faixaValor.max) &&
+          hospPref.every((h) => p.rede.some((r) => r.hospitalId === h))
+        );
+      }),
+    // perfilDe depende só dos cortes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [base, totais, perfil, corte1, corte2, faixaValor, hospPref],
+  );
+  const ops = useMemo(() => {
+    const com = new Set(filtrados.map((p) => p.operadoraId));
+    return operadoras.filter((o) => com.has(o.id));
+  }, [operadoras, filtrados]);
   const op = ops.find((o) => o.id === opSel);
-  const operadoraDoPlano = new Map(planos.map((p) => [p.id, p.operadoraId]));
+  const operadoraDoPlano = useMemo(() => new Map(planos.map((p) => [p.id, p.operadoraId])), [planos]);
 
   function set<K extends keyof FiltroCotacao>(k: K, v: FiltroCotacao[K]) {
     const f = { ...filtro, [k]: v };
@@ -867,7 +883,8 @@ function SeletorPlanos({
                           <div className="min-w-0 flex-1">
                             <div className="font-medium">{p.nome}</div>
                             <div className="text-xs text-muted-foreground">
-                              {p.acomodacao} · {rotuloCopart(p)} · {p.abrangencia} · {p.rede.length} hospitais
+                              {p.acomodacao} · {rotuloCopart(p)} · {p.abrangencia} · {p.qtdRede ?? p.rede.length}{" "}
+                              hospitais
                               {op.idss != null ? ` · IDSS ${numero(op.idss, 4)}` : ""}
                             </div>
                           </div>

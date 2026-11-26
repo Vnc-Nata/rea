@@ -4,9 +4,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { BaseAns, IndicadoresAns, RedeAns } from "../../lib/ans";
-import type { TabelaVenda } from "../../lib/tabelas";
+import { CABECALHO_TABELAS, type TabelaVenda } from "../../lib/tabelas";
 import type { Grupo, Plano } from "../../lib/types";
-import { vidasVazias } from "../../lib/types";
+import { FAIXAS, vidasVazias } from "../../lib/types";
 import { CORES_GRUPO, aplicarAjustes, catalogo, converterBase, planosDaCidade } from "../../lib/catalogo";
 import { rotuloMunicipio, ufDoCodigo } from "../../lib/municipios";
 import { precoDisponivel, precoTotal } from "../../lib/utils";
@@ -258,17 +258,88 @@ test("hospitais da base ANS levam a UF", () => {
   assert.equal(cat.hospitais.find((h) => h.id === "cnes-2126494")!.uf, "MG");
 });
 
-test("catálogo não é reconstruído por escrita no db.json que não muda os ajustes", () => {
-  const antes = process.env.ANS_DIR;
+const DB = path.join(process.cwd(), "data", "db.json");
+
+/** Roda `fn` com ANS_DIR/TABELAS_DIR de teste e devolve o db.json (conteúdo e datas) ao estado original. */
+function comAmbiente(tabelasDir: string, fn: () => void) {
+  const antes = { ans: process.env.ANS_DIR, tab: process.env.TABELAS_DIR };
+  readDb(); // garante que o db.json existe
+  const conteudo = fs.readFileSync(DB);
+  const st = fs.statSync(DB);
   process.env.ANS_DIR = path.relative(process.cwd(), dir);
+  process.env.TABELAS_DIR = tabelasDir;
   try {
-    const c1 = catalogo();
-    const arq = path.join(process.cwd(), "data", "db.json");
-    readDb(); // garante que existe
-    const futuro = new Date(Date.now() + 5000);
-    fs.utimesSync(arq, futuro, futuro);
-    assert.strictEqual(catalogo(), c1);
+    fn();
   } finally {
-    process.env.ANS_DIR = antes;
+    fs.writeFileSync(DB, conteudo);
+    fs.utimesSync(DB, st.atime, st.mtime);
+    if (antes.ans === undefined) delete process.env.ANS_DIR;
+    else process.env.ANS_DIR = antes.ans;
+    if (antes.tab === undefined) delete process.env.TABELAS_DIR;
+    else process.env.TABELAS_DIR = antes.tab;
   }
+}
+
+test("catálogo não é reconstruído por escrita no db.json que não muda os ajustes", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tab-vazia-"));
+  comAmbiente(tmp, () => {
+    const c1 = catalogo();
+    // reescreve o db.json com o mesmo conteúdo e data no futuro: mtime muda, ajustes não
+    fs.writeFileSync(DB, fs.readFileSync(DB));
+    const futuro = new Date(Date.now() + 5000);
+    fs.utimesSync(DB, futuro, futuro);
+    assert.strictEqual(catalogo(), c1);
+  });
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test("catálogo é reconstruído quando um ajuste muda (preços ANS mudam; ao desfazer, voltam)", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tab-vazia-"));
+  comAmbiente(tmp, () => {
+    const c1 = catalogo();
+    const antes = c1.planos.find((p) => p.origemPreco === "ans" && p.operadoraId === "ans-326305")!;
+    assert.ok(antes);
+    const db = readDb();
+    db.conta = { ...db.conta, ajustes: { "ans-326305": 10 } } as typeof db.conta;
+    fs.writeFileSync(DB, JSON.stringify(db));
+    const c2 = catalogo();
+    assert.notStrictEqual(c2, c1);
+    const depois = c2.planos.find((p) => p.id === antes.id)!;
+    const f = FAIXAS.find((x) => antes.precos[x] != null)!;
+    assert.ok(depois.precos[f]! > antes.precos[f]!, "preço sobe com ajuste de +10%");
+    // outra operadora não muda
+    const outro = c1.planos.find((p) => p.operadoraId !== "ans-326305" && p.origemPreco === "ans")!;
+    assert.deepEqual(c2.planos.find((p) => p.id === outro.id)!.precos, outro.precos);
+    // desfaz o ajuste
+    db.conta = { ...db.conta, ajustes: {} } as typeof db.conta;
+    fs.writeFileSync(DB, JSON.stringify(db));
+    assert.deepEqual(catalogo().planos.find((p) => p.id === antes.id)!.precos, antes.precos);
+  });
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test("catálogo é reconstruído quando uma tabela de venda (CSV) muda", () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tab-venda-"));
+  comAmbiente(tmp, () => {
+    const id = "ans-1000001";
+    const preco = () => catalogo().planos.find((p) => p.id === id)!;
+    const sem = preco();
+    assert.equal(sem.origemPreco, "ans");
+    const csv = (valor: string) =>
+      `${CABECALHO_TABELAS.join(";")}\n326305;400001013;Plano Tabela;SP;;PME;2026-01-01;${Array(10).fill(valor).join(";")}\n`;
+    const arq = path.join(tmp, "t.csv");
+    fs.writeFileSync(arq, csv("111,11"));
+    const c1 = preco();
+    assert.equal(c1.origemPreco, "tabela");
+    assert.equal(c1.precos["24-28"], 111.11);
+    // mesma tabela: sem reconstrução
+    assert.strictEqual(preco(), c1);
+    // CSV alterado (tamanho diferente): preços novos
+    fs.writeFileSync(arq, csv("222,2"));
+    assert.equal(preco().precos["24-28"], 222.2);
+    // CSV removido: volta ao preço ANS
+    fs.rmSync(arq);
+    assert.deepEqual(preco().precos, sem.precos);
+  });
+  fs.rmSync(tmp, { recursive: true, force: true });
 });

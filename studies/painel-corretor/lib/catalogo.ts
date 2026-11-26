@@ -304,6 +304,11 @@ interface CacheCatalogo {
   baseRuim: string | null; // dir+mtime de uma base.json que não abriu (avisa uma vez)
   versoesTabelas: WeakMap<TabelaVenda[], number>;
   proximaVersao: number;
+  indices: WeakMap<Plano[], IndicePlanos>; // índices por lista de planos (ver indice())
+}
+interface IndicePlanos {
+  porCidade: Map<string, Plano[]>;
+  porId: Map<string, Plano>;
 }
 const G = globalThis as typeof globalThis & { __catalogoAns?: CacheCatalogo };
 const estado = (G.__catalogoAns ??= {
@@ -313,6 +318,7 @@ const estado = (G.__catalogoAns ??= {
   baseRuim: null,
   versoesTabelas: new WeakMap(),
   proximaVersao: 1,
+  indices: new WeakMap(),
 });
 
 const DIR_LOGOS = () => path.join(process.cwd(), "public", "logos");
@@ -411,9 +417,9 @@ function tabelasVersao(t: TabelaVenda[]): number {
 }
 
 // Índices por cidade e por id, calculados uma vez por lista de planos (a lista muda só quando o catálogo muda).
-const indices = new WeakMap<Plano[], { porCidade: Map<string, Plano[]>; porId: Map<string, Plano> }>();
-function indice(planos: Plano[]) {
-  let i = indices.get(planos);
+// Ficam em `estado` (globalThis) para que o índice do pré-aquecimento valha para as rotas.
+function indice(planos: Plano[]): IndicePlanos {
+  let i = estado.indices.get(planos);
   if (!i) {
     const porCidade = new Map<string, Plano[]>();
     for (const p of planos)
@@ -423,7 +429,7 @@ function indice(planos: Plano[]) {
         else porCidade.set(c, [p]);
       }
     i = { porCidade, porId: new Map(planos.map((p) => [p.id, p])) };
-    indices.set(planos, i);
+    estado.indices.set(planos, i);
   }
   return i;
 }

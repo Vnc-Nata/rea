@@ -112,14 +112,11 @@ test("cidadeValida: mantém se existe, senão São Paulo - SP, senão a primeira
 test("filtrarSelecao: hospitais só da UF da cidade do filtro (planos nacionais têm rede em outras UFs)", () => {
   const todas = new Set(cat.operadoras.map((o) => o.id));
   const bh = filtrarSelecao(cat, { ...filtro, cidade: "Belo Horizonte - MG" }, grupos("29-33", 1), todas);
-  assert.ok(
-    bh.planos.some((p) =>
-      p.rede.some(
-        (r) =>
-          r.hospitalId.startsWith("cnes-") && !r.hospitalId.includes("2126494") && !r.hospitalId.includes("2695324"),
-      ),
-    ),
-  );
+  // os planos de origem têm hospitais de outra UF na rede; o payload do seletor, não
+  const originais = new Map(cat.planos.map((p) => [p.id, p]));
+  const ufDe = new Map(cat.hospitais.map((h) => [h.id, h.uf]));
+  assert.ok(bh.planos.some((p) => originais.get(p.id)!.rede.some((r) => ufDe.get(r.hospitalId) === "SP")));
+  assert.ok(bh.planos.every((p) => p.rede.every((r) => ufDe.get(r.hospitalId) === "MG")));
   assert.ok(bh.hospitais.length > 0);
   assert.ok(
     bh.hospitais.every((h) => h.uf === "MG"),
@@ -160,4 +157,24 @@ test("filtrarSelecao: base fictícia (hospitais sem UF) mantém todos os hospita
   };
   const r = filtrarSelecao(c, filtro, grupos("29-33", 1), new Set(cat.operadoras.map((o) => o.id)));
   assert.deepEqual(r.hospitais.map((h) => h.id).sort(), ["h1", "h2"]);
+});
+
+test("filtrarSelecao: rede enviada só com hospitais devolvidos (da UF) e qtdRede com a contagem completa", () => {
+  const todas = new Set(cat.operadoras.map((o) => o.id));
+  const r = filtrarSelecao(cat, filtro, grupos("29-33", 2), todas);
+  const enviados = new Set(r.hospitais.map((h) => h.id));
+  const original = new Map(cat.planos.map((p) => [p.id, p]));
+  assert.ok(r.planos.length > 0);
+  for (const p of r.planos) {
+    assert.equal(p.qtdRede, original.get(p.id)!.rede.length);
+    assert.ok(p.rede.every((x) => enviados.has(x.hospitalId)));
+    assert.ok(p.rede.length <= p.qtdRede!);
+  }
+  // o catálogo de origem não é alterado (cenários/proposta leem a rede completa dele)
+  assert.ok(cat.planos.some((p) => p.rede.length > 0));
+  // ao menos um plano nacional/estadual tem hospitais de outra UF fora do payload
+  assert.ok(
+    r.planos.some((p) => p.rede.length < p.qtdRede!),
+    "alguma rede foi reduzida",
+  );
 });

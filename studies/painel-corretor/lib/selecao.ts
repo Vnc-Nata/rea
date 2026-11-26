@@ -6,7 +6,8 @@ import { precoDisponivel, precoTotal } from "./utils";
 export const CIDADE_PADRAO = "São Paulo - SP";
 
 export interface Selecao {
-  planos: Plano[];
+  /** No payload do seletor, `rede` vem reduzida aos hospitais devolvidos e `qtdRede` traz a contagem completa. */
+  planos: (Plano & { qtdRede?: number })[];
   operadoras: Operadora[];
   hospitais: Hospital[];
 }
@@ -41,12 +42,20 @@ export function filtrarSelecao(
   for (const x of planos) for (const r of x.p.rede) usadosHosp.add(r.hospitalId);
   const uf = / - ([A-Z]{2})$/.exec(filtro.cidade)?.[1];
   const colacao = new Intl.Collator("pt-BR");
+  const hospitais = cat.hospitais
+    .filter((h) => usadosHosp.has(h.id) && (!h.uf || !uf || h.uf === uf))
+    .sort((a, b) => colacao.compare(a.nome, b.nome));
+  // A rede enviada ao seletor só leva os hospitais devolvidos (os da UF); a contagem completa vai em qtdRede.
+  // Cenários, proposta e comparativo leem a rede inteira do catálogo no servidor, não deste payload.
+  const enviados = new Set(hospitais.map((h) => h.id));
   return {
-    planos: planos.map((x) => x.p),
+    planos: planos.map((x) => ({
+      ...x.p,
+      qtdRede: x.p.rede.length,
+      rede: x.p.rede.filter((r) => enviados.has(r.hospitalId)),
+    })),
     operadoras: cat.operadoras.filter((o) => usadasOp.has(o.id)),
-    hospitais: cat.hospitais
-      .filter((h) => usadosHosp.has(h.id) && (!h.uf || !uf || h.uf === uf))
-      .sort((a, b) => colacao.compare(a.nome, b.nome)),
+    hospitais,
   };
 }
 
