@@ -528,6 +528,12 @@ const FILTROS = {
   contratacao: ["Opcional", "Compulsória"],
 } as const;
 
+const semAcento = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
 function SeletorPlanos({
   open,
   onClose,
@@ -544,6 +550,7 @@ function SeletorPlanos({
   const [perfil, setPerfil] = useState<Perfil>("Indiferente");
   const [faixaValor, setFaixaValor] = useState<{ min?: number; max?: number }>({});
   const [hospPref, setHospPref] = useState<string[]>([]);
+  const [textoHosp, setTextoHosp] = useState("");
   const [filtro, setFiltro] = useState<FiltroCotacao>(cotacao.filtro);
   const [extra, setExtra] = useState<{
     mei?: boolean;
@@ -591,7 +598,15 @@ function SeletorPlanos({
   const corte1 = ordenados[Math.floor(ordenados.length / 3)] ?? 0;
   const corte2 = ordenados[Math.floor((ordenados.length * 2) / 3)] ?? 0;
   const perfilDe = (v: number): Perfil => (v < corte1 ? "Econômico" : v < corte2 ? "Intermediário" : "Premium");
-  const hospDisponiveis = hospitais.filter((h) => base.some((p) => p.rede.some((r) => r.hospitalId === h.id)));
+  // Hospitais da rede dos planos filtrados (o servidor já manda só os da UF da cidade, em ordem alfabética).
+  const naRede = new Set(base.flatMap((p) => p.rede.map((r) => r.hospitalId)));
+  const buscaHosp = semAcento(textoHosp.trim());
+  const hospDisponiveis = hospitais.filter(
+    (h) =>
+      naRede.has(h.id) &&
+      !hospPref.includes(h.id) &&
+      (!buscaHosp || semAcento(`${h.nome} ${h.regiao}`).includes(buscaHosp)),
+  );
   const filtrados = base.filter((p) => {
     const v = totais.get(p.id)!;
     return (
@@ -612,6 +627,7 @@ function SeletorPlanos({
     // Planos e hospitais de outra região/modalidade não valem mais.
     setSelecionados([]);
     setHospPref([]);
+    setTextoHosp("");
     updateFiltro(cotacao.id, f);
   }
   const toggleExtra = (k: keyof typeof extra, v: string | boolean) =>
@@ -708,14 +724,31 @@ function SeletorPlanos({
             </div>
             <div className="px-2">
               <div className="mb-2 text-sm font-medium">Hospitais de preferência</div>
+              {(hospDisponiveis.length > 15 || textoHosp) && (
+                <Input
+                  type="search"
+                  placeholder="Buscar hospital ou cidade"
+                  aria-label="Buscar hospital"
+                  className="mb-2 h-8"
+                  value={textoHosp}
+                  onChange={(e) => setTextoHosp(e.target.value)}
+                />
+              )}
               <Select
                 value=""
+                aria-label="Adicionar hospital"
                 onChange={(e) => e.target.value && setHospPref((h) => [...new Set([...h, e.target.value])])}
               >
-                <option value="">Adicionar hospital...</option>
+                <option value="">
+                  {hospDisponiveis.length
+                    ? `Adicionar hospital... (${hospDisponiveis.length})`
+                    : textoHosp
+                      ? "Nenhum hospital encontrado"
+                      : "Adicionar hospital..."}
+                </option>
                 {hospDisponiveis.map((h) => (
                   <option key={h.id} value={h.id}>
-                    {h.nome}
+                    {h.uf && h.regiao !== filtro.cidade ? `${h.nome} (${h.regiao})` : h.nome}
                   </option>
                 ))}
               </Select>

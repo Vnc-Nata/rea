@@ -7,6 +7,7 @@ import {
   lerRedeAns,
   mtimeAns,
   dirAns,
+  semErro,
   vcmPrincipal,
   type BaseAns,
   type IndicadoresAns,
@@ -14,14 +15,17 @@ import {
   type PlanoAns,
   type RedeAns,
 } from "./ans";
+import { lerConta } from "./conta-db";
 import { mtimeDb, readDb } from "./db";
 import { capitalizar, rotuloMunicipio } from "./municipios";
 import { CIDADES } from "./seed";
+import { filtrarSelecao, habilitadasEfetivas, type Selecao } from "./selecao";
 import { lerTabelas, tabelaPara, type TabelaVenda } from "./tabelas";
 import {
   FAIXAS,
   type Faixa,
   type FiltroCotacao,
+  type Grupo,
   type Hospital,
   type Modalidade,
   type Operadora,
@@ -140,22 +144,64 @@ export function converterBase(
     ajustes?: Record<string, number>;
   },
 ): Omit<Catalogo, "fonte"> {
-  const { rede, indicadores, tabelas = [], ajustes = {} } = opts;
+  return aplicarAjustes(converterSemAjustes(base, opts), opts.ajustes ?? {});
+}
+
+/**
+ * Aplica o ajuste % da operadora ao preço "Referência ANS" (VCM). Barato: não reconverte a base, então mudar um
+ * ajuste não relê nem reconverte os 140 MB da base real. Sem ajustes devolve o mesmo objeto.
+ */
+export function aplicarAjustes<C extends { planos: Plano[] }>(conv: C, ajustes: Record<string, number>): C {
+  if (!Object.values(ajustes).some((v) => v)) return conv;
+  return {
+    ...conv,
+    planos: conv.planos.map((p) => {
+      const aj = ajustes[p.operadoraId];
+      if (p.origemPreco !== "ans" || !aj) return p;
+      const fator = 1 + aj / 100;
+      return {
+        ...p,
+        precos: Object.fromEntries(FAIXAS.map((f) => [f, p.precos[f] == null ? null : arred(p.precos[f]! * fator)])),
+      } as Plano;
+    }),
+  };
+}
+
+function converterSemAjustes(
+  base: BaseAns,
+  opts: { rede?: RedeAns; indicadores?: IndicadoresAns; tabelas?: TabelaVenda[] },
+): Omit<Catalogo, "fonte"> {
+  const { rede, indicadores, tabelas = [] } = opts;
   const operadoras = base.operadoras.map((o) => converterOperadora(o, indicadores));
   const opPorRegistro = new Map(operadoras.map((o) => [o.registroAns, o]));
 
+  // Rótulos de município: a base real repete os mesmos ~1.500 nomes milhões de vezes; converte cada um uma vez e
+  // ordena as listas pela posição do rótulo na ordem alfabética (localeCompare por plano levava segundos).
+  const rotulos = new Map<string, string>();
+  const rotulo = (nome: string) => {
+    let r = rotulos.get(nome);
+    if (r === undefined) rotulos.set(nome, (r = rotuloMunicipio(nome)));
+    return r;
+  };
+  for (const p of base.planos) for (const m of p.municipios) rotulo(m.nome);
+  const colacao = new Intl.Collator("pt-BR");
+  const posicao = new Map([...new Set(rotulos.values())].sort(colacao.compare).map((r, i) => [r, i] as const));
+  const ordenar = (xs: Iterable<string>) =>
+    [...new Set(xs)].sort(
+      (a, b) => (posicao.get(a) ?? Infinity) - (posicao.get(b) ?? Infinity) || colacao.compare(a, b),
+    );
+
   // Cidades das UFs detalhadas, por UF (para planos sem lista de municípios).
-  const porUf = new Map<string, Set<string>>();
+  const porUf = new Map<string, string[]>();
   const ufsDet = new Set(base.ufsDetalhadas);
-  for (const p of base.planos)
-    for (const m of p.municipios) {
-      const rot = rotuloMunicipio(m.nome);
-      const uf = rot.slice(-2);
-      if (!ufsDet.has(uf)) continue;
-      if (!porUf.has(uf)) porUf.set(uf, new Set());
-      porUf.get(uf)!.add(rot);
-    }
-  const ordenar = (xs: Iterable<string>) => [...new Set(xs)].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  for (const rot of posicao.keys()) {
+    const uf = rot.slice(-2);
+    if (!ufsDet.has(uf)) continue;
+    if (!porUf.has(uf)) porUf.set(uf, []);
+    porUf.get(uf)!.push(rot);
+  }
+  // Listas iguais (ex.: todos os planos nacionais) compartilham o mesmo array.
+  const listasUf = new Map<string, string[]>();
 
   // Tabelas por modalidade: uma tabela com modalidade só vale para planos daquela modalidade.
   const tabelasPorMod = new Map<Modalidade, TabelaVenda[]>();
@@ -168,15 +214,18 @@ export function converterBase(
   const servicos = (cnes: string) => (rede?.hospitais[cnes]?.urgencia ? "H,PS" : "H");
 
   const planos: Plano[] = [];
+  const todasCidades = new Set<string>();
   for (const pa of base.planos) {
     const op = opPorRegistro.get(pa.registroAns);
     const modalidade = MODALIDADES[norm(pa.contratacao)];
     if (!op || !modalidade) continue;
 
-    const tabela = tabelaPara(
-      { registroAns: pa.registroAns, codigoAns: pa.codigoAns, nome: pa.nome, ufs: pa.ufs },
-      tabelasPorMod.get(modalidade)!,
-    );
+    const tabela = tabelas.length
+      ? tabelaPara(
+          { registroAns: pa.registroAns, codigoAns: pa.codigoAns, nome: pa.nome, ufs: pa.ufs },
+          tabelasPorMod.get(modalidade)!,
+        )
+      : undefined;
     const vcm = vcmPrincipal(pa);
     let precos: Record<Faixa, number | null>;
     let origemPreco: Plano["origemPreco"];
@@ -184,15 +233,19 @@ export function converterBase(
       precos = precosDe(tabela.precos);
       origemPreco = "tabela";
     } else if (vcm && vcm.precos.some((v) => v != null)) {
-      precos = precosDe(vcm.precos, 1 + (ajustes[op.id] ?? 0) / 100);
+      precos = precosDe(vcm.precos);
       origemPreco = "ans";
     } else continue; // sem preço: fica fora do seletor (aparece na Busca ANS)
 
-    let cidades = ordenar(pa.municipios.map((m) => rotuloMunicipio(m.nome)));
-    if (!cidades.length) {
+    let cidades: string[];
+    if (pa.municipios.length) cidades = ordenar(pa.municipios.map((m) => rotulo(m.nome)));
+    else {
       const ufs = pa.ufs.length ? pa.ufs : base.ufsDetalhadas;
-      cidades = ordenar(ufs.flatMap((uf) => [...(porUf.get(uf) ?? [])]));
+      const chave = ufs.join(",");
+      cidades = listasUf.get(chave) ?? ordenar(ufs.flatMap((uf) => porUf.get(uf) ?? []));
+      listasUf.set(chave, cidades);
     }
+    for (const c of cidades) todasCidades.add(c);
 
     const redeItens: RedeItem[] = (rede?.porPlano[pa.id] ?? [])
       .filter((c) => rede?.hospitais[c])
@@ -223,8 +276,8 @@ export function converterBase(
   }
 
   const hospitais: Hospital[] = Object.entries(rede?.hospitais ?? {}).map(([cnes, h]) => {
-    const rot = rotuloMunicipio(h.municipio);
-    return { id: `cnes-${cnes}`, nome: h.nome, bairro: rot, regiao: rot };
+    const rot = rotulo(h.municipio);
+    return { id: `cnes-${cnes}`, nome: h.nome, bairro: rot, regiao: rot, uf: h.uf || rot.slice(-2) };
   });
 
   return {
@@ -232,16 +285,35 @@ export function converterBase(
     operadoras,
     planos,
     hospitais,
-    cidades: ordenar(planos.flatMap((p) => p.cidades)),
+    cidades: ordenar(todasCidades),
   };
 }
 
 // ---------------------------------------------------------------------------
 // Leitura com cache
+//
+// Os caches ficam em globalThis: no Next.js o instrumentation.ts (pré-aquecimento) e as rotas podem carregar
+// instâncias diferentes deste módulo, e o recarregamento em desenvolvimento descartaria um cache do módulo.
+// Dois níveis: a base convertida (só muda com base/rede/indicadores/tabelas) e o catálogo final (+ ajustes e
+// logos, baratos). Uma escrita no db.json que não muda os ajustes não invalida nada.
 
-let cache: { chave: string; cat: Catalogo } | null = null;
-let cacheAjustes: { mtime: number; ajustes: Record<string, number> } | null = null;
-let baseRuim: string | null = null; // dir+mtime de uma base.json que não abriu (avisa uma vez)
+interface CacheCatalogo {
+  base: { chave: string; conv: Omit<Catalogo, "fonte"> } | null;
+  cat: { chave: string; cat: Catalogo } | null;
+  ajustes: { mtime: number; ajustes: Record<string, number> } | null;
+  baseRuim: string | null; // dir+mtime de uma base.json que não abriu (avisa uma vez)
+  versoesTabelas: WeakMap<TabelaVenda[], number>;
+  proximaVersao: number;
+}
+const G = globalThis as typeof globalThis & { __catalogoAns?: CacheCatalogo };
+const estado = (G.__catalogoAns ??= {
+  base: null,
+  cat: null,
+  ajustes: null,
+  baseRuim: null,
+  versoesTabelas: new WeakMap(),
+  proximaVersao: 1,
+});
 
 const DIR_LOGOS = () => path.join(process.cwd(), "public", "logos");
 
@@ -256,19 +328,19 @@ function mtime(arq: string): number {
 /** Ajustes por operadora (Conta.ajustes); só relê o db.json quando o mtime muda. */
 function lerAjustes(): Record<string, number> {
   const m = mtimeDb();
-  if (!cacheAjustes || cacheAjustes.mtime !== m || m === 0)
-    cacheAjustes = { mtime: m, ajustes: readDb().conta?.ajustes ?? {} };
-  return cacheAjustes.ajustes;
+  if (!estado.ajustes || estado.ajustes.mtime !== m || m === 0)
+    estado.ajustes = { mtime: m, ajustes: readDb().conta?.ajustes ?? {} };
+  return estado.ajustes.ajustes;
 }
 
 /** base.json, ou null se não existir ou estiver corrompida (aviso no log, catálogo fictício). */
 function lerBaseSegura(): BaseAns | null {
   const id = `${dirAns()}:${mtimeAns("base.json")}`;
-  if (baseRuim === id) return null;
+  if (estado.baseRuim === id) return null;
   try {
     return lerBaseAns();
   } catch (e) {
-    baseRuim = id;
+    estado.baseRuim = id;
     console.warn(`[catalogo] base.json ilegível em ${dirAns()}; usando dados fictícios.`, e);
     return null;
   }
@@ -293,52 +365,97 @@ function catalogoFicticio(): Catalogo {
 
 /** Catálogo atual (ANS se houver base.json, senão fictício). Cache por mtime dos arquivos + ajustes. */
 export function catalogo(): Catalogo {
-  const base = lerBaseSegura();
-  if (!base) {
-    cache = null;
-    return catalogoFicticio();
-  }
-  const ajustes = lerAjustes();
-  const { tabelas } = lerTabelas();
-  const chave = JSON.stringify([
+  // Base já convertida e arquivos sem mudança: não relê nem a base (a leitura de 140 MB fica para a conversão).
+  const chaveBase = JSON.stringify([
     dirAns(),
     mtimeAns("base.json"),
     mtimeAns("rede.json"),
     mtimeAns("indicadores.json"),
-    tabelasVersao(tabelas),
-    mtime(DIR_LOGOS()),
-    ajustes,
+    tabelasVersao(lerTabelas().tabelas),
   ]);
-  if (cache && cache.chave === chave) return cache.cat;
-  const conv = converterBase(base, {
-    rede: lerRedeAns() ?? undefined,
-    indicadores: lerIndicadoresAns() ?? undefined,
-    tabelas,
-    ajustes,
-  });
+  if (estado.base?.chave !== chaveBase) {
+    estado.base = null;
+    estado.cat = null;
+    const base = mtimeAns("base.json") ? lerBaseSegura() : null;
+    if (!base) return catalogoFicticio();
+    const t0 = Date.now();
+    const conv = converterSemAjustes(base, {
+      rede: semErro(lerRedeAns) ?? undefined,
+      indicadores: semErro(lerIndicadoresAns) ?? undefined,
+      tabelas: lerTabelas().tabelas,
+    });
+    estado.base = { chave: chaveBase, conv };
+    if (conv.planos.length > 5000)
+      console.log(`[catalogo] base ANS convertida em ${Date.now() - t0} ms (${conv.planos.length} planos).`);
+  }
+  const ajustes = lerAjustes();
+  const chave = JSON.stringify([chaveBase, mtime(DIR_LOGOS()), ajustes]);
+  if (estado.cat?.chave === chave) return estado.cat.cat;
+  const conv = aplicarAjustes(estado.base.conv, ajustes);
   const cat: Catalogo = {
     fonte: "ans",
     ...conv,
     operadoras: conv.operadoras.map((o) => ({ ...o, logo: logoDe(o.registroAns) })),
   };
-  cache = { chave, cat };
+  estado.cat = { chave, cat };
   return cat;
 }
 
-// lerTabelas devolve o mesmo array enquanto os CSVs não mudam; a identidade vira um número de versão.
-const versoes = new WeakMap<TabelaVenda[], number>();
-let proximaVersao = 1;
+// lerTabelas devolve o mesmo array (cache global) enquanto os CSVs não mudam; a identidade vira um número de
+// versão. Sem tabelas (pasta ausente ou vazia) a versão é sempre 0.
 function tabelasVersao(t: TabelaVenda[]): number {
-  let v = versoes.get(t);
-  if (!v) versoes.set(t, (v = proximaVersao++));
+  if (!t.length) return 0;
+  let v = estado.versoesTabelas.get(t);
+  if (!v) estado.versoesTabelas.set(t, (v = estado.proximaVersao++));
   return v;
+}
+
+// Índices por cidade e por id, calculados uma vez por lista de planos (a lista muda só quando o catálogo muda).
+const indices = new WeakMap<Plano[], { porCidade: Map<string, Plano[]>; porId: Map<string, Plano> }>();
+function indice(planos: Plano[]) {
+  let i = indices.get(planos);
+  if (!i) {
+    const porCidade = new Map<string, Plano[]>();
+    for (const p of planos)
+      for (const c of p.cidades) {
+        const l = porCidade.get(c);
+        if (l) l.push(p);
+        else porCidade.set(c, [p]);
+      }
+    i = { porCidade, porId: new Map(planos.map((p) => [p.id, p])) };
+    indices.set(planos, i);
+  }
+  return i;
+}
+
+/** Planos comercializados na cidade (rótulo "Cidade - UF"), na ordem do catálogo. */
+export function planosDaCidade(cat: { planos: Plano[] }, cidade: string): Plano[] {
+  return indice(cat.planos).porCidade.get(cidade) ?? [];
 }
 
 /** Planos do catálogo para o filtro da cotação (segmento, modalidade e cidade). */
 export function planosPara(f: FiltroCotacao): Plano[] {
-  return catalogo().planos.filter(
-    (p) => p.segmento === f.segmento && p.modalidade === f.modalidade && p.cidades.includes(f.cidade),
-  );
+  return planosDaCidade(catalogo(), f.cidade).filter((p) => p.segmento === f.segmento && p.modalidade === f.modalidade);
+}
+
+/**
+ * Planos do catálogo para o seletor (server action buscarPlanos): filtro da cotação, só com preço nas faixas que
+ * têm vidas, só operadoras habilitadas na conta (ou todas com `todas`). Não envia o catálogo inteiro.
+ */
+export function selecaoPlanos(filtro: FiltroCotacao, grupos: Grupo[], opts: { todas?: boolean } = {}): Selecao {
+  const cat = catalogo();
+  const habilitadas = opts.todas
+    ? cat.operadoras.map((o) => o.id)
+    : habilitadasEfetivas(lerConta(readDb()).operadorasHabilitadas, cat.fonte, cat.operadoras, registrosAlvo());
+  return filtrarSelecao({ ...cat, planos: planosDaCidade(cat, filtro.cidade) }, filtro, grupos, new Set(habilitadas));
+}
+
+/** Pré-aquece o catálogo e o índice por cidade (instrumentation.ts, ao subir o servidor). */
+export function preaquecerCatalogo(): void {
+  const t0 = Date.now();
+  const cat = catalogo();
+  planosDaCidade(cat, cat.cidades[0] ?? "");
+  if (cat.fonte === "ans") console.log(`[catalogo] pré-aquecido em ${Date.now() - t0} ms.`);
 }
 
 let cacheAlvo: { mtime: number; registros: string[] } | null = null;
@@ -360,7 +477,7 @@ export function registrosAlvo(): string[] {
 }
 
 export function planoPorId(id: string): Plano | undefined {
-  return catalogo().planos.find((p) => p.id === id);
+  return indice(catalogo().planos).porId.get(id);
 }
 
 export function operadoraPorId(id: string): Operadora | undefined {

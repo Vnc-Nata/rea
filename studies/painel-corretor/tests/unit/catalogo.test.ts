@@ -7,7 +7,7 @@ import type { BaseAns, IndicadoresAns, RedeAns } from "../../lib/ans";
 import type { TabelaVenda } from "../../lib/tabelas";
 import type { Grupo, Plano } from "../../lib/types";
 import { vidasVazias } from "../../lib/types";
-import { CORES_GRUPO, catalogo, converterBase } from "../../lib/catalogo";
+import { CORES_GRUPO, aplicarAjustes, catalogo, converterBase, planosDaCidade } from "../../lib/catalogo";
 import { rotuloMunicipio, ufDoCodigo } from "../../lib/municipios";
 import { precoDisponivel, precoTotal } from "../../lib/utils";
 import { readDb } from "../../lib/db";
@@ -232,4 +232,43 @@ test("cores cobrem exatamente os grupos de operadoras-alvo.json", () => {
     grupo: string;
   }[];
   assert.deepEqual(Object.keys(CORES_GRUPO).sort(), alvo.map((g) => g.grupo).sort());
+});
+
+test("aplicarAjustes sobre a base convertida = converterBase com ajustes (não reconverte a base)", () => {
+  const ajustes = { "ans-005711": 10, "ans-326305": -5.5 };
+  const semAjuste = converterBase(base, { rede, indicadores });
+  assert.deepEqual(aplicarAjustes(semAjuste, ajustes), converterBase(base, { rede, indicadores, ajustes }));
+  assert.strictEqual(aplicarAjustes(semAjuste, {}), semAjuste);
+  // a base sem ajuste não é alterada
+  assert.deepEqual(semAjuste, converterBase(base, { rede, indicadores }));
+});
+
+test("planosDaCidade: índice por cidade igual ao filtro linear", () => {
+  for (const cidade of [...cat.cidades, "Atlântida - XX"]) {
+    assert.deepEqual(
+      planosDaCidade(cat, cidade).map((p) => p.id),
+      cat.planos.filter((p) => p.cidades.includes(cidade)).map((p) => p.id),
+      cidade,
+    );
+  }
+});
+
+test("hospitais da base ANS levam a UF", () => {
+  for (const h of cat.hospitais) assert.match(h.uf ?? "", /^(SP|MG)$/, h.id);
+  assert.equal(cat.hospitais.find((h) => h.id === "cnes-2126494")!.uf, "MG");
+});
+
+test("catálogo não é reconstruído por escrita no db.json que não muda os ajustes", () => {
+  const antes = process.env.ANS_DIR;
+  process.env.ANS_DIR = path.relative(process.cwd(), dir);
+  try {
+    const c1 = catalogo();
+    const arq = path.join(process.cwd(), "data", "db.json");
+    readDb(); // garante que existe
+    const futuro = new Date(Date.now() + 5000);
+    fs.utimesSync(arq, futuro, futuro);
+    assert.strictEqual(catalogo(), c1);
+  } finally {
+    process.env.ANS_DIR = antes;
+  }
 });

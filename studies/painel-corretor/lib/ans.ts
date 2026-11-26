@@ -74,7 +74,10 @@ export function dirAns(): string {
   return path.resolve(process.cwd(), process.env.ANS_DIR ?? path.join("data", "ans"));
 }
 
-const cache = new Map<string, { mtime: number; dado: unknown }>();
+// Cache em globalThis: no Next.js o pré-aquecimento (instrumentation.ts) e as rotas podem usar instâncias
+// diferentes deste módulo, e a base real tem 140 MB (não pode ser lida de novo por instância).
+const G = globalThis as typeof globalThis & { __jsonAns?: Map<string, { mtime: number; dado: unknown }> };
+const cache = (G.__jsonAns ??= new Map());
 
 /** Lê um JSON da pasta da ANS com cache por data de modificação; null se não existir. */
 function lerJson<T>(nome: string): T | null {

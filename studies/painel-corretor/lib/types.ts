@@ -40,6 +40,7 @@ export interface Hospital {
   nome: string;
   bairro: string;
   regiao: string;
+  uf?: string; // só na base ANS (a fictícia não tem)
 }
 
 export interface RedeItem {

@@ -108,3 +108,56 @@ test("cidadeValida: mantém se existe, senão São Paulo - SP, senão a primeira
   assert.equal(cidadeValida("Goiânia - GO", ["Belo Horizonte - MG"]), "Belo Horizonte - MG");
   assert.equal(cidadeValida("x", []), "São Paulo - SP");
 });
+
+test("filtrarSelecao: hospitais só da UF da cidade do filtro (planos nacionais têm rede em outras UFs)", () => {
+  const todas = new Set(cat.operadoras.map((o) => o.id));
+  const bh = filtrarSelecao(cat, { ...filtro, cidade: "Belo Horizonte - MG" }, grupos("29-33", 1), todas);
+  assert.ok(
+    bh.planos.some((p) =>
+      p.rede.some(
+        (r) =>
+          r.hospitalId.startsWith("cnes-") && !r.hospitalId.includes("2126494") && !r.hospitalId.includes("2695324"),
+      ),
+    ),
+  );
+  assert.ok(bh.hospitais.length > 0);
+  assert.ok(
+    bh.hospitais.every((h) => h.uf === "MG"),
+    JSON.stringify(bh.hospitais),
+  );
+  const sp = filtrarSelecao(cat, filtro, grupos("29-33", 1), todas);
+  assert.ok(sp.hospitais.length > 0 && sp.hospitais.every((h) => h.uf === "SP"));
+  // ordem alfabética
+  const nomes = sp.hospitais.map((h) => h.nome);
+  assert.deepEqual(
+    nomes,
+    [...nomes].sort((a, b) => a.localeCompare(b, "pt-BR")),
+  );
+});
+
+test("filtrarSelecao: base fictícia (hospitais sem UF) mantém todos os hospitais da rede", () => {
+  const hosp = [
+    { id: "h1", nome: "Hospital B", bairro: "Centro", regiao: "São Paulo - Centro" },
+    { id: "h2", nome: "Hospital A", bairro: "Savassi", regiao: "Belo Horizonte" },
+  ];
+  const p = {
+    ...cat.planos.find(
+      (x) => x.cidades.includes("São Paulo - SP") && x.modalidade === "PME" && x.segmento === "Saúde",
+    )!,
+  };
+  const c = {
+    planos: [
+      {
+        ...p,
+        rede: [
+          { hospitalId: "h1", servicos: "H" },
+          { hospitalId: "h2", servicos: "H" },
+        ],
+      },
+    ],
+    operadoras: cat.operadoras,
+    hospitais: hosp,
+  };
+  const r = filtrarSelecao(c, filtro, grupos("29-33", 1), new Set(cat.operadoras.map((o) => o.id)));
+  assert.deepEqual(r.hospitais.map((h) => h.id).sort(), ["h1", "h2"]);
+});

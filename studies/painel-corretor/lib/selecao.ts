@@ -15,6 +15,8 @@ export interface Selecao {
  * Planos do filtro com preço para as faixas que têm vidas, só de operadoras habilitadas.
  * Ordem: operadoras na ordem do catálogo; dentro de cada uma, preço total crescente.
  * `cidades` de cada plano vira só a cidade do filtro (planos nacionais teriam centenas).
+ * Hospitais: os da rede dos planos devolvidos, em ordem alfabética; na base ANS (hospitais com UF), só os da UF da
+ * cidade do filtro (a rede de um plano nacional tem hospitais de outros estados).
  */
 export function filtrarSelecao(
   cat: Selecao,
@@ -35,11 +37,16 @@ export function filtrarSelecao(
   const ordemOp = new Map(cat.operadoras.map((o, i) => [o.id, i]));
   planos.sort((a, b) => ordemOp.get(a.p.operadoraId)! - ordemOp.get(b.p.operadoraId)! || a.total - b.total);
   const usadasOp = new Set(planos.map((x) => x.p.operadoraId));
-  const usadosHosp = new Set(planos.flatMap((x) => x.p.rede.map((r) => r.hospitalId)));
+  const usadosHosp = new Set<string>();
+  for (const x of planos) for (const r of x.p.rede) usadosHosp.add(r.hospitalId);
+  const uf = / - ([A-Z]{2})$/.exec(filtro.cidade)?.[1];
+  const colacao = new Intl.Collator("pt-BR");
   return {
     planos: planos.map((x) => x.p),
     operadoras: cat.operadoras.filter((o) => usadasOp.has(o.id)),
-    hospitais: cat.hospitais.filter((h) => usadosHosp.has(h.id)),
+    hospitais: cat.hospitais
+      .filter((h) => usadosHosp.has(h.id) && (!h.uf || !uf || h.uf === uf))
+      .sort((a, b) => colacao.compare(a.nome, b.nome)),
   };
 }
 

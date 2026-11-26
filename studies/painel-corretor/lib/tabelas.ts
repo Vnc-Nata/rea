@@ -184,7 +184,12 @@ function avisarRepetidas(tabelas: TabelaVenda[], erros: ErroTabela[]) {
   }
 }
 
-const cache = new Map<string, { chave: string; r: { tabelas: TabelaVenda[]; erros: ErroTabela[] } }>();
+// Cache em globalThis: no Next.js o pré-aquecimento (instrumentation.ts) e as rotas podem usar instâncias
+// diferentes deste módulo; o catálogo usa a identidade do array como versão das tabelas.
+const G = globalThis as typeof globalThis & {
+  __tabelasVenda?: Map<string, { chave: string; r: { tabelas: TabelaVenda[]; erros: ErroTabela[] } }>;
+};
+const cache = (G.__tabelasVenda ??= new Map());
 // Mesmo objeto sempre que a pasta não existe: quem usa a identidade como chave de cache não reconstrói à toa.
 const VAZIO: { tabelas: TabelaVenda[]; erros: ErroTabela[] } = Object.freeze({
   tabelas: Object.freeze([]) as unknown as TabelaVenda[],

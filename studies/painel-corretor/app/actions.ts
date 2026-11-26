@@ -6,11 +6,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { catalogo, operadoraPorId, planoPorId, registrosAlvo } from "@/lib/catalogo";
+import { catalogo, operadoraPorId, planoPorId, selecaoPlanos } from "@/lib/catalogo";
 import { grupoDe, tituloComparacao } from "@/lib/comparar-db";
 import { readDb, updateDb } from "@/lib/db";
 import { contaPadrao, lerConta } from "@/lib/conta-db";
-import { CIDADE_PADRAO, cidadeValida, filtrarSelecao, habilitadasEfetivas, type Selecao } from "@/lib/selecao";
+import { CIDADE_PADRAO, cidadeValida, type Selecao } from "@/lib/selecao";
 import type { Conta, Db, Faixa, FiltroCotacao, Grupo, OpcoesEnvio, Perfil, Usuario } from "@/lib/types";
 import { FAIXAS, vidasVazias } from "@/lib/types";
 import { novoId, precoDisponivel } from "@/lib/utils";
@@ -74,20 +74,13 @@ export async function updateFiltro(cotacaoId: string, filtro: FiltroCotacao) {
   });
 }
 
-/**
- * Planos do catálogo para o seletor: filtro da cotação, só com preço nas faixas que têm vidas,
- * só operadoras habilitadas na conta (ou todas com `todas`). Não envia o catálogo inteiro.
- */
+/** Planos do catálogo para o seletor (ver selecaoPlanos). Não envia o catálogo inteiro. */
 export async function buscarPlanos(
   filtro: FiltroCotacao,
   grupos: Grupo[],
   opts: { todas?: boolean } = {},
 ): Promise<Selecao> {
-  const cat = catalogo();
-  const habilitadas = opts.todas
-    ? cat.operadoras.map((o) => o.id)
-    : habilitadasEfetivas(lerConta(readDb()).operadorasHabilitadas, cat.fonte, cat.operadoras, registrosAlvo());
-  return filtrarSelecao(cat, filtro, grupos, new Set(habilitadas));
+  return selecaoPlanos(filtro, grupos, opts);
 }
 
 export async function onPlanoSelect(cotacaoId: string, planoIds: string[]) {
