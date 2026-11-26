@@ -1,0 +1,5 @@
+﻿registro_operadora;codigo_plano_ans;nome_plano;uf;municipio_ibge;modalidade;vigencia;f00_18;f19_23;f24_28;f29_33;f34_38;f39_43;f44_48;f49_53;f54_58;f59_mais
+326305;470123456;Plano Ouro Exemplo;SP;3550308;PME;2026-01-01;"312,50";350,00;400.25;450;500;550;600;700;"1.034,80";1500,99
+;470999999;Sem Registro;SP;;PF;2026-01-01;1;2;3;4;5;6;7;8;9;10
+326305;;Plano Prata Exemplo;SP;;Individual;01/03/2026;100;;120;130;140;150;160;170;180;190
+326305;;Plano Prata Exemplo;SP;;Individual;01/09/2026;110;120;130;140;150;160;170;180;190;200
