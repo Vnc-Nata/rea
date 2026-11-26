@@ -153,6 +153,17 @@ export interface Conta {
   ajustes?: Record<string, number>; // id da operadora → ajuste % sobre o VCM
 }
 
+/** Caso de comparação com o Painel: plano + cidade + vidas, com o total que o Painel mostra (digitado). */
+export interface Comparacao {
+  id: string;
+  titulo: string;
+  planoId: string; // "" = plano não encontrado no catálogo (escolher)
+  cidade: string;
+  vidas: Record<Faixa, number>;
+  valorPainel?: number;
+  criadaEm: string;
+}
+
 export interface Db {
   conta?: Conta;
   perfil: Perfil;
@@ -160,6 +171,8 @@ export interface Db {
   hospitais: Hospital[];
   planos: Plano[];
   cotacoes: Cotacao[];
+  comparacoes?: Comparacao[];
+  comparacoesIniciadas?: boolean; // casos iniciais já semeados (excluí-los não os recria)
 }
 
 export function faixaLabel(f: Faixa) {
