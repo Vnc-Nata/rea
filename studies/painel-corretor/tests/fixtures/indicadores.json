@@ -1,0 +1,47 @@
+{
+  "geradoEm": "2026-11-26T00:00:00.000Z",
+  "porOperadora": {
+    "326305": {
+      "idss": 0.78,
+      "idssAno": 2025,
+      "reajuste": 13.5,
+      "reajusteAnterior": 11.9,
+      "ciclo": 2026
+    },
+    "368253": {
+      "idss": 0.8,
+      "idssAno": 2025,
+      "reajuste": 10.9,
+      "reajusteAnterior": 9.5,
+      "ciclo": 2026
+    },
+    "421928": {
+      "idss": 0.72,
+      "idssAno": 2025,
+      "reajuste": 11.2,
+      "reajusteAnterior": 9.8,
+      "ciclo": 2026
+    },
+    "005711": {
+      "idss": 0.91,
+      "idssAno": 2025,
+      "reajuste": 15.8,
+      "reajusteAnterior": 14.2,
+      "ciclo": 2026
+    },
+    "006246": {
+      "idss": 0.86,
+      "idssAno": 2025,
+      "reajuste": 14.1,
+      "reajusteAnterior": 12.6,
+      "ciclo": 2026
+    },
+    "000582": {
+      "idss": 0.88,
+      "idssAno": 2025,
+      "reajuste": 12.7,
+      "reajusteAnterior": 10.4,
+      "ciclo": 2026
+    }
+  }
+}

@@ -52,7 +52,8 @@ export interface BaseAns {
   planos: PlanoAns[];
 }
 
-const ARQ = path.join(process.cwd(), "data", "ans", "base.json");
+// ANS_DIR (relativo a process.cwd()) permite apontar para outra pasta, ex.: tests/fixtures.
+const ARQ = path.join(path.resolve(process.cwd(), process.env.ANS_DIR ?? path.join("data", "ans")), "base.json");
 let cache: { mtime: number; base: BaseAns } | null = null;
 
 export function lerBaseAns(): BaseAns | null {
