@@ -162,6 +162,7 @@ export interface Comparacao {
   vidas: Record<Faixa, number>;
   valorPainel?: number;
   criadaEm: string;
+  inicial?: string; // chave do caso inicial semeado (para resolver o plano depois)
 }
 
 export interface Db {

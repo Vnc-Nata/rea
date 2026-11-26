@@ -1,7 +1,7 @@
 import "server-only";
 import { catalogo } from "./catalogo";
 import { readDb, updateDb } from "./db";
-import { resumoVidas } from "./comparar";
+import { nomeCasa, resumoVidas } from "./comparar";
 import type { Comparacao, Db, Faixa, Plano } from "./types";
 import { vidasVazias } from "./types";
 import { novoId, precoDisponivel } from "./utils";
@@ -19,45 +19,64 @@ function achar(grupo: string, trecho: string, cidade: string, vidas: Record<Faix
     (p) =>
       ops.has(p.operadoraId) &&
       p.segmento === "Saúde" &&
-      norm(p.nome).includes(trecho) &&
+      nomeCasa(p.nome, trecho) &&
       p.cidades.includes(cidade) &&
       precoDisponivel(p, grupoDe(vidas)),
   );
 }
 
-function casoInicial(titulo: string, plano: Plano | undefined, cidade: string, faixa: Faixa, n: number): Comparacao {
-  return {
-    id: novoId("cmp"),
-    titulo,
-    planoId: plano?.id ?? "",
-    cidade,
-    vidas: { ...vidasVazias(), [faixa]: n },
-    criadaEm: new Date().toISOString(),
-  };
-}
+const INICIAIS = [
+  {
+    chave: "amil-bronze",
+    titulo: "Amil Bronze",
+    grupo: "amil",
+    trecho: "bronze",
+    cidade: "São Caetano do Sul - SP",
+    faixa: "24-28" as Faixa,
+    n: 3,
+  },
+  {
+    chave: "bradesco-nacional-ii",
+    titulo: "Bradesco Nacional II",
+    grupo: "bradesco",
+    trecho: "nacional ii",
+    cidade: "Belo Horizonte - MG",
+    faixa: "44-48" as Faixa,
+    n: 4,
+  },
+];
 
-/** Semeia os dois casos iniciais uma única vez (flag no db); apagá-los não os recria. */
+type Inicial = (typeof INICIAIS)[number];
+const vidasDe = (i: Inicial) => ({ ...vidasVazias(), [i.faixa]: i.n });
+
+/**
+ * Semeia os dois casos iniciais uma única vez (flag no db; apagá-los não os recria), só com o catálogo da ANS.
+ * Casos iniciais que ficaram sem plano são resolvidos de novo quando o catálogo da ANS estiver disponível.
+ */
 export function comparacoesDoDb(): Comparacao[] {
   const atual = readDb();
-  if (atual.comparacoesIniciadas) return atual.comparacoes ?? [];
+  if (catalogo().fonte !== "ans") return atual.comparacoes ?? [];
+  const pendente = (atual.comparacoes ?? []).some((c) => c.inicial && !c.planoId);
+  if (atual.comparacoesIniciadas && !pendente) return atual.comparacoes ?? [];
   return updateDb((db: Db) => {
     if (!db.comparacoesIniciadas) {
-      const c1 = "São Caetano do Sul - SP";
-      const c2 = "Belo Horizonte - MG";
-      const v1 = { ...vidasVazias(), "24-28": 3 };
-      const v2 = { ...vidasVazias(), "44-48": 4 };
       db.comparacoes = [
         ...(db.comparacoes ?? []),
-        casoInicial(`Amil Bronze · ${c1} · 3 vidas 24-28`, achar("amil", "bronze", c1, v1), c1, "24-28", 3),
-        casoInicial(
-          `Bradesco Nacional II · ${c2} · 4 vidas 44-48`,
-          achar("bradesco", "nacional ii", c2, v2),
-          c2,
-          "44-48",
-          4,
-        ),
+        ...INICIAIS.map((i) => ({
+          id: novoId("cmp"),
+          titulo: `${i.titulo} · ${i.cidade} · ${resumoVidas(vidasDe(i))}`,
+          planoId: achar(i.grupo, i.trecho, i.cidade, vidasDe(i))?.id ?? "",
+          cidade: i.cidade,
+          vidas: vidasDe(i),
+          criadaEm: new Date().toISOString(),
+          inicial: i.chave,
+        })),
       ];
       db.comparacoesIniciadas = true;
+    }
+    for (const c of db.comparacoes ?? []) {
+      const i = INICIAIS.find((x) => x.chave === c.inicial);
+      if (i && !c.planoId) c.planoId = achar(i.grupo, i.trecho, i.cidade, vidasDe(i))?.id ?? "";
     }
     return db.comparacoes ?? [];
   });

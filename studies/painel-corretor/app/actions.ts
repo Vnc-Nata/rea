@@ -12,7 +12,7 @@ import { readDb, updateDb } from "@/lib/db";
 import { contaPadrao, lerConta } from "@/lib/conta-db";
 import { CIDADE_PADRAO, cidadeValida, filtrarSelecao, habilitadasEfetivas, type Selecao } from "@/lib/selecao";
 import type { Conta, Db, Faixa, FiltroCotacao, Grupo, OpcoesEnvio, Perfil, Usuario } from "@/lib/types";
-import { vidasVazias } from "@/lib/types";
+import { FAIXAS, vidasVazias } from "@/lib/types";
 import { novoId, precoDisponivel } from "@/lib/utils";
 
 type Result = { success: true } | { success: false; error: string };
@@ -352,8 +352,10 @@ export async function criarComparacao(dados: {
   if (!plano) return { success: false, error: "Escolha um plano." };
   if (!plano.cidades.includes(dados.cidade))
     return { success: false, error: "O plano não é comercializado nesta cidade." };
-  if (Object.values(dados.vidas).reduce((a, b) => a + b, 0) < 1)
-    return { success: false, error: "Informe ao menos uma vida." };
+  const qtds = FAIXAS.map((f) => dados.vidas?.[f] ?? 0);
+  if (!qtds.every((n) => Number.isInteger(n) && n >= 0) || qtds.reduce((a, b) => a + b, 0) < 1)
+    return { success: false, error: "Informe ao menos uma vida (números inteiros)." };
+  dados = { ...dados, vidas: Object.fromEntries(FAIXAS.map((f, i) => [f, qtds[i]])) as Record<Faixa, number> };
   if (!precoDisponivel(plano, grupoDe(dados.vidas)))
     return { success: false, error: "O plano não tem preço para alguma faixa informada." };
   const titulo = tituloComparacao(plano, operadoraPorId(plano.operadoraId)?.nome ?? "", dados.cidade, dados.vidas);

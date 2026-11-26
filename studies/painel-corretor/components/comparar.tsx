@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   aplicarAjuste,
   atualizarValorPainel,
@@ -13,7 +13,7 @@ import {
 } from "@/app/actions";
 import type { Faixa, Operadora, Plano } from "@/lib/types";
 import { FAIXAS, vidasVazias } from "@/lib/types";
-import { diferencaPct } from "@/lib/comparar";
+import { diferencaPct, lerValorBR } from "@/lib/comparar";
 import { cn, moeda, numero } from "@/lib/utils";
 import { OperadoraLogo, OrigemPreco } from "./brand";
 import { Button, Input, Label, Panel, Select, useToast } from "./ui";
@@ -37,11 +37,6 @@ export interface SugestaoOp {
 }
 
 const pct = (v: number) => `${v > 0 ? "+" : ""}${numero(v, 1)}%`;
-
-function lerValor(s: string): number | null {
-  const n = Number(s.trim().replace(/\./g, "").replace(",", "."));
-  return s.trim() && Number.isFinite(n) && n > 0 ? n : null;
-}
 
 export function Comparar({
   linhas,
@@ -137,9 +132,12 @@ function LinhaCaso({ l }: { l: Linha }) {
   const [valor, setValor] = useState(l.valorPainel != null ? numero(l.valorPainel) : "");
   const [, start] = useTransition();
   const dif = l.nosso != null ? diferencaPct(l.nosso, l.valorPainel ?? undefined) : null;
+  const [erro, setErro] = useState(false);
   const salvar = () => {
-    const n = lerValor(valor);
-    if ((n ?? null) === l.valorPainel) return;
+    const n = lerValorBR(valor);
+    if (n != null && Number.isNaN(n)) return setErro(true);
+    setErro(false);
+    if (n === l.valorPainel) return;
     start(async () => {
       await atualizarValorPainel(l.id, n);
     });
@@ -167,10 +165,15 @@ function LinhaCaso({ l }: { l: Linha }) {
           inputMode="decimal"
           placeholder="R$ 0,00"
           value={valor}
-          onChange={(e) => setValor(e.target.value)}
+          onChange={(e) => {
+            setValor(e.target.value);
+            setErro(false);
+          }}
+          aria-invalid={erro}
           onBlur={salvar}
           onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
         />
+        {erro && <p className="mt-1 text-xs text-red-600">Valor inválido. Ex.: 1.234,56</p>}
       </td>
       <td
         className={cn(
@@ -210,16 +213,18 @@ function BuscaPlano({
 }) {
   const [q, setQ] = useState("");
   const [res, setRes] = useState<PlanoBusca[]>([]);
+  const req = useRef(0);
+  useEffect(() => {
+    const n = ++req.current;
+    if (!q.trim()) return setRes([]);
+    const t = setTimeout(() => {
+      buscarPlanosPorNome(cidade, q, vidas).then((r) => n === req.current && setRes(r));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q, cidade, vidas]);
   return (
     <div className="grid gap-1">
-      <Input
-        placeholder="Buscar plano pelo nome"
-        value={q}
-        onChange={(e) => {
-          setQ(e.target.value);
-          buscarPlanosPorNome(cidade, e.target.value, vidas).then(setRes);
-        }}
-      />
+      <Input placeholder="Buscar plano pelo nome" value={q} onChange={(e) => setQ(e.target.value)} />
       {res.length > 0 && (
         <ul className="max-h-48 overflow-auto rounded-md border text-sm">
           {res.map((p) => (
@@ -229,6 +234,7 @@ function BuscaPlano({
                 className="w-full px-3 py-1.5 text-left hover:bg-muted"
                 onClick={() => {
                   onEscolher(p);
+                  req.current++;
                   setQ("");
                   setRes([]);
                 }}
@@ -270,7 +276,9 @@ function NovoCaso({ cidades }: { cidades: string[] }) {
   const criar = () =>
     start(async () => {
       if (!plano) return toast("Escolha um plano.", true);
-      const r = await criarComparacao({ planoId: plano.id, cidade, vidas, valorPainel: lerValor(painel) ?? undefined });
+      const v = lerValorBR(painel);
+      if (v != null && Number.isNaN(v)) return toast("Valor do Painel inválido. Ex.: 1.234,56", true);
+      const r = await criarComparacao({ planoId: plano.id, cidade, vidas, valorPainel: v ?? undefined });
       toast(r.success ? "Caso adicionado." : r.error, !r.success);
       if (r.success) {
         setPlano(null);
