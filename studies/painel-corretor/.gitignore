@@ -7,3 +7,8 @@ public/logos/
 data/ans/rede.json
 data/ans/indicadores.json
 data/ans/*.json.tmp
+data/ans/base.backup.json
+data/ans/importar.log
+# Preços lidos do Painel do Corretor nas rodadas de divergência: ficam só neste PC.
+data/comparacoes/
+relatorios/

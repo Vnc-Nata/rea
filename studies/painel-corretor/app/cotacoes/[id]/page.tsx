@@ -4,6 +4,7 @@ import { OperadoraLogo, OrigemPreco } from "@/components/brand";
 import { Imprimir, PlanoIndisponivel, RegistrarVisualizacao } from "@/components/proposta";
 import { buttonClass } from "@/lib/button";
 import { operadoraPorId, planoPorId } from "@/lib/catalogo";
+import { planoDoCenario } from "@/lib/congelar";
 import { readDb } from "@/lib/db";
 import { mostraItem } from "@/lib/opcoes";
 import { OPCOES_PADRAO } from "@/lib/types";
@@ -36,7 +37,8 @@ export default async function Proposta({
     );
   const cenarios = [...c.cenarios].sort((a, b) => Number(!!b.destaque) - Number(!!a.destaque));
   const itens = cenarios.map((cen) => {
-    const p = planoPorId(cen.planoId);
+    const atual = planoPorId(cen.planoId);
+    const p = atual && planoDoCenario(atual, cen);
     const op = p && operadoraPorId(p.operadoraId);
     return { cen, p: op ? p : undefined, op };
   });

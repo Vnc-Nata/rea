@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { catalogo, operadoraPorId, planoPorId, selecaoPlanos } from "@/lib/catalogo";
 import { grupoDe, tituloComparacao } from "@/lib/comparar-db";
+import { congelarPreco } from "@/lib/congelar";
 import { readDb, updateDb } from "@/lib/db";
 import { contaPadrao, lerConta } from "@/lib/conta-db";
 import { CIDADE_PADRAO, cidadeValida, type Selecao } from "@/lib/selecao";
@@ -89,7 +90,13 @@ export async function onPlanoSelect(cotacaoId: string, planoIds: string[]) {
     if (!c) return;
     for (const planoId of planoIds) {
       if (c.cenarios.some((x) => x.planoId === planoId)) continue;
-      c.cenarios.push({ id: novoId("cen"), planoId, comentario: "" });
+      const plano = c.opcoes?.congelar ? planoPorId(planoId) : undefined;
+      c.cenarios.push({
+        id: novoId("cen"),
+        planoId,
+        comentario: "",
+        ...(plano ? { precoCongelado: congelarPreco(plano) } : {}),
+      });
       c.eventos.push({ tipo: "Plano adicionado", em: new Date().toISOString(), por: db.perfil.usuario });
     }
   });
@@ -152,7 +159,18 @@ export async function updatePerfil(perfil: Pick<Perfil, "corretora" | "telefone"
 export async function updateOpcoes(cotacaoId: string, opcoes: OpcoesEnvio) {
   updateDb((db) => {
     const c = db.cotacoes.find((c) => c.id === cotacaoId);
-    if (c) c.opcoes = opcoes;
+    if (!c) return;
+    // Ligar "Congelar preços" fotografa os preços de hoje (cenários já congelados mantêm a data original);
+    // desligar volta a usar a base atual.
+    const em = new Date().toISOString();
+    for (const cen of c.cenarios) {
+      if (!opcoes.congelar) delete cen.precoCongelado;
+      else if (!cen.precoCongelado) {
+        const plano = planoPorId(cen.planoId);
+        if (plano) cen.precoCongelado = congelarPreco(plano, em);
+      }
+    }
+    c.opcoes = opcoes;
   });
   revalidatePath(`/cotacoes/${cotacaoId}/edit`);
 }

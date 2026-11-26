@@ -41,6 +41,7 @@ import {
 import type { Selecao } from "@/lib/selecao";
 import type { Cotacao, FiltroCotacao, Hospital, Modalidade, Operadora, Plano, Segmento } from "@/lib/types";
 import { FAIXAS, OPCOES_PADRAO, faixaDaIdade, faixaLabel } from "@/lib/types";
+import { planoDoCenario } from "@/lib/congelar";
 import type { OpcoesEnvio } from "@/lib/types";
 import { alternar, itensDisponiveis, regioesDisponiveis, rotuloContagem } from "@/lib/opcoes";
 import { cn, idade, numero, precoDisponivel, precoTotal, tempoRelativo, totalVidas, vidasPorFaixa } from "@/lib/utils";
@@ -143,9 +144,10 @@ export function CotacaoEditor({
         <div className="flex-1">
           <div className="grid gap-4 sm:grid-cols-[repeat(auto-fit,_minmax(210px,_max-content))] sm:justify-start">
             {cotacao.cenarios.map((c) => {
-              const plano = planoMap[c.planoId];
-              if (!plano || !opMap[plano.operadoraId])
+              const atual = planoMap[c.planoId];
+              if (!atual || !opMap[atual.operadoraId])
                 return <PlanoIndisponivel key={c.id} onRemove={() => onPlanoRemove(cotacao.id, c.id)} />;
+              const plano = planoDoCenario(atual, c);
               return (
                 <PlanoCard
                   key={c.id}
@@ -1524,6 +1526,22 @@ function OpcoesDialog({
           type="date"
           value={o.validade ?? ""}
           onChange={(e) => setO({ ...o, validade: e.target.value || undefined })}
+        />
+      </label>
+      <label className="flex items-center justify-between gap-4 text-sm">
+        <span>
+          <span className="block font-medium">Congelar preços</span>
+          <span className="block text-xs text-muted-foreground">
+            A proposta mantém os valores de hoje até a validade, mesmo que a base mude.
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          data-congelar
+          checked={!!o.congelar}
+          onChange={(e) => setO({ ...o, congelar: e.target.checked || undefined })}
+          className="size-5 accent-[hsl(var(--primary))]"
         />
       </label>
       <div className="divide-y">

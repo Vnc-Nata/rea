@@ -11,6 +11,7 @@ import {
 } from "@/components/proposta";
 import { buttonClass } from "@/lib/button";
 import { catalogo, operadoraPorId, planoPorId } from "@/lib/catalogo";
+import { planoDoCenario } from "@/lib/congelar";
 import { readDb } from "@/lib/db";
 import { mostraItem, mostraRegiao } from "@/lib/opcoes";
 import { FAIXAS, OPCOES_PADRAO, faixaLabel } from "@/lib/types";
@@ -29,7 +30,8 @@ export default async function Cenario({
   const c = db.cotacoes.find((x) => x.id === id);
   const cen = c?.cenarios.find((x) => x.id === cenarioId);
   if (!c || !cen) notFound();
-  const plano = planoPorId(cen.planoId);
+  const atual = planoPorId(cen.planoId);
+  const plano = atual && planoDoCenario(atual, cen);
   const op = plano && operadoraPorId(plano.operadoraId);
   if (!plano || !op)
     return (
@@ -177,6 +179,12 @@ export default async function Cenario({
                   </p>
                 )}
                 <OrigemPreco plano={plano} className="-mt-3 mb-4 block text-right" />
+                {cen.precoCongelado && (
+                  <p className="-mt-3 mb-4 text-right text-xs text-muted-foreground" data-preco-congelado>
+                    Preço congelado em {new Date(cen.precoCongelado.em).toLocaleDateString("pt-BR")}
+                    {o.validade ? `, válido até ${o.validade.split("-").reverse().join("/")}` : ""}
+                  </p>
+                )}
               </>
             )}
             <a

@@ -296,10 +296,13 @@ test("catálogo não é reconstruído por escrita no db.json que não muda os aj
 test("catálogo é reconstruído quando um ajuste muda (preços ANS mudam; ao desfazer, voltam)", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tab-vazia-"));
   comAmbiente(tmp, () => {
+    // Parte de "sem ajustes": o db.json real pode já ter ajustes salvos pela equipe.
+    const db = readDb();
+    db.conta = { ...db.conta, ajustes: {} } as typeof db.conta;
+    fs.writeFileSync(DB, JSON.stringify(db));
     const c1 = catalogo();
     const antes = c1.planos.find((p) => p.origemPreco === "ans" && p.operadoraId === "ans-326305")!;
     assert.ok(antes);
-    const db = readDb();
     db.conta = { ...db.conta, ajustes: { "ans-326305": 10 } } as typeof db.conta;
     fs.writeFileSync(DB, JSON.stringify(db));
     const c2 = catalogo();

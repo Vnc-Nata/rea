@@ -84,11 +84,14 @@ export interface Cenario {
   planoId: string;
   comentario: string;
   destaque?: boolean;
+  /** Preços do dia em que a proposta foi congelada (Opções › Congelar preços). */
+  precoCongelado?: { precos: Record<Faixa, number | null>; iof?: number; em: string };
 }
 
 /** Opções de envio (menu ⋮ › Opções, rota ?d=flags no app de referência). */
 export interface OpcoesEnvio {
   validade?: string; // AAAA-MM-DD; depois dela a proposta pública mostra "expirada"
+  congelar?: boolean; // mantém na proposta os preços do dia em que foi ligado (Cenario.precoCongelado)
   valores: boolean;
   rede: boolean;
   maisInfo: boolean;
