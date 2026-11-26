@@ -56,8 +56,14 @@ const vidasDe = (i: Inicial) => ({ ...vidasVazias(), [i.faixa]: i.n });
 export function comparacoesDoDb(): Comparacao[] {
   const atual = readDb();
   if (catalogo().fonte !== "ans") return atual.comparacoes ?? [];
-  const pendente = (atual.comparacoes ?? []).some((c) => c.inicial && !c.planoId);
-  if (atual.comparacoesIniciadas && !pendente) return atual.comparacoes ?? [];
+  // Só grava o db quando algo muda: semente (uma vez) ou um caso inicial que agora encontrou plano.
+  const resolvidos = new Map<string, string>();
+  for (const c of atual.comparacoes ?? []) {
+    const i = !c.planoId && INICIAIS.find((x) => x.chave === c.inicial);
+    const id = i ? achar(i.grupo, i.trecho, i.cidade, vidasDe(i))?.id : undefined;
+    if (id) resolvidos.set(c.id, id);
+  }
+  if (atual.comparacoesIniciadas && !resolvidos.size) return atual.comparacoes ?? [];
   return updateDb((db: Db) => {
     if (!db.comparacoesIniciadas) {
       db.comparacoes = [
@@ -74,10 +80,7 @@ export function comparacoesDoDb(): Comparacao[] {
       ];
       db.comparacoesIniciadas = true;
     }
-    for (const c of db.comparacoes ?? []) {
-      const i = INICIAIS.find((x) => x.chave === c.inicial);
-      if (i && !c.planoId) c.planoId = achar(i.grupo, i.trecho, i.cidade, vidasDe(i))?.id ?? "";
-    }
+    for (const c of db.comparacoes ?? []) if (!c.planoId && resolvidos.has(c.id)) c.planoId = resolvidos.get(c.id)!;
     return db.comparacoes ?? [];
   });
 }
