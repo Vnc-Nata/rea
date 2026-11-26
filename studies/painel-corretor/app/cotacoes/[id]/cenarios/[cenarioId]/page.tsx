@@ -1,9 +1,16 @@
 import { ArrowLeft, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { OperadoraLogo } from "@/components/brand";
-import { Comentario, CoparticipacaoDetalhes, RedeCards, RegistrarVisualizacao } from "@/components/proposta";
+import { OperadoraLogo, OrigemPreco } from "@/components/brand";
+import {
+  Comentario,
+  CoparticipacaoDetalhes,
+  PlanoIndisponivel,
+  RedeCards,
+  RegistrarVisualizacao,
+} from "@/components/proposta";
 import { buttonClass } from "@/lib/button";
+import { catalogo, operadoraPorId, planoPorId } from "@/lib/catalogo";
 import { readDb } from "@/lib/db";
 import { FAIXAS, OPCOES_PADRAO, faixaLabel } from "@/lib/types";
 import { numero, precoTotal, vidasPorFaixa } from "@/lib/utils";
@@ -20,9 +27,24 @@ export default async function Cenario({
   const db = readDb();
   const c = db.cotacoes.find((x) => x.id === id);
   const cen = c?.cenarios.find((x) => x.id === cenarioId);
-  const plano = db.planos.find((p) => p.id === cen?.planoId);
-  if (!c || !cen || !plano) notFound();
-  const op = db.operadoras.find((o) => o.id === plano.operadoraId)!;
+  if (!c || !cen) notFound();
+  const plano = planoPorId(cen.planoId);
+  const op = plano && operadoraPorId(plano.operadoraId);
+  if (!plano || !op)
+    return (
+      <div className="mx-auto max-w-sm space-y-4">
+        <Link
+          href={`/cotacoes/${c.id}${preview ? "?preview=1" : ""}`}
+          className="flex items-center gap-1 text-sm text-primary"
+        >
+          <ArrowLeft className="h-4" /> voltar
+        </Link>
+        <PlanoIndisponivel cotacaoId={c.id} cenarioId={cen.id} removivel={!!preview} />
+      </div>
+    );
+  const hospIds = new Set(plano.rede.map((r) => r.hospitalId));
+  const hospitais = catalogo().hospitais.filter((h) => hospIds.has(h.id));
+  const ficticio = plano.origemPreco === "ficticio";
   const vidas = vidasPorFaixa(c.grupos);
   const o = c.opcoes ?? OPCOES_PADRAO;
   const tel = db.perfil.telefone.replace(/\D/g, "");
@@ -44,9 +66,11 @@ export default async function Cenario({
       </div>
       <div className="border-border px-8 py-6 sm:border-t">
         <dt className="text-sm font-medium leading-6">
-          {plano.coparticipacao === "Com coparticipação"
-            ? `Coparticipação ${plano.percentualCopart ?? ""}%`
-            : "Sem coparticipação"}
+          {plano.coparticipacao !== "Com coparticipação"
+            ? "Sem coparticipação"
+            : plano.percentualCopart != null
+              ? `Coparticipação ${plano.percentualCopart}%`
+              : "Com coparticipação"}
         </dt>
         <dd className="mt-1 text-sm leading-6 text-gray-500">
           {plano.coparticipacao === "Com coparticipação" ? (
@@ -61,16 +85,20 @@ export default async function Cenario({
       </div>
       <div className="border-border px-8 py-6 sm:border-t">
         <dt className="text-sm font-medium leading-6">Abrangência {plano.abrangencia.toLowerCase()}</dt>
-        <dd className="mt-1 text-sm leading-6 text-gray-500">Registro do produto (fictício): {plano.registroAns}</dd>
-      </div>
-      <div className="border-border px-8 py-6 sm:border-t">
-        <dt className="text-sm font-medium leading-6">Contratação {plano.contratacao.toLowerCase()}</dt>
         <dd className="mt-1 text-sm leading-6 text-gray-500">
-          {plano.contratacao === "Compulsória"
-            ? "Todos os funcionários elegíveis entram no plano."
-            : "A adesão ao plano é opcional para os elegíveis."}
+          Registro do produto{ficticio ? " (fictício)" : " na ANS"}: {plano.registroAns}
         </dd>
       </div>
+      {ficticio && (
+        <div className="border-border px-8 py-6 sm:border-t">
+          <dt className="text-sm font-medium leading-6">Contratação {plano.contratacao.toLowerCase()}</dt>
+          <dd className="mt-1 text-sm leading-6 text-gray-500">
+            {plano.contratacao === "Compulsória"
+              ? "Todos os funcionários elegíveis entram no plano."
+              : "A adesão ao plano é opcional para os elegíveis."}
+          </dd>
+        </div>
+      )}
     </dl>
   );
 
@@ -115,12 +143,19 @@ export default async function Cenario({
                       </dd>
                     </dl>
                   ))}
+                  {plano.iof ? (
+                    <dl className="flex py-2 text-sm">
+                      <dt>IOF</dt>
+                      <dd className="ml-auto">{numero(plano.iof * 100)}%</dd>
+                    </dl>
+                  ) : null}
                 </div>
                 <div className="mb-4 flex items-end justify-end gap-1">
                   <span>R$</span>
                   <span className="text-2xl font-semibold text-primary">{numero(precoTotal(plano, c.grupos))}</span>
                   <span className="text-xs">/mês</span>
                 </div>
+                <OrigemPreco plano={plano} className="-mt-3 mb-4 block text-right" />
               </>
             )}
             <a
@@ -132,7 +167,7 @@ export default async function Cenario({
             </a>
             <p className="mt-1 text-xs">Não há cobrança de taxa.</p>
           </div>
-          {o.rede && <RedeCards plano={plano} op={op} hospitais={db.hospitais} />}
+          {o.rede && <RedeCards plano={plano} op={op} hospitais={hospitais} />}
           {o.maisInfo && <div className="block rounded-sm bg-background shadow-sm sm:hidden">{detalhes}</div>}
         </div>
       </div>

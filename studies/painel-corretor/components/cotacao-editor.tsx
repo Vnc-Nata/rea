@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangle,
   ArrowLeft,
   ChevronDown,
   Copy,
@@ -21,6 +22,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
+  buscarPlanos,
   deleteCotacao,
   duplicateCotacao,
   editTitulo,
@@ -35,12 +37,12 @@ import {
   updateGrupo,
   updateOpcoes,
 } from "@/app/actions";
+import type { Selecao } from "@/lib/selecao";
 import type { Cotacao, FiltroCotacao, Hospital, Modalidade, Operadora, Plano, Segmento } from "@/lib/types";
 import { FAIXAS, OPCOES_PADRAO, faixaDaIdade, faixaLabel } from "@/lib/types";
 import type { OpcoesEnvio } from "@/lib/types";
-import { CIDADES } from "@/lib/seed";
 import { cn, idade, numero, precoTotal, tempoRelativo, totalVidas, vidasPorFaixa } from "@/lib/utils";
-import { OperadoraLogo } from "./brand";
+import { OperadoraIcone, OperadoraLogo, OrigemPreco } from "./brand";
 import {
   Button,
   Drawer,
@@ -57,12 +59,14 @@ import {
 
 interface Props {
   cotacao: Cotacao;
+  /** Só os planos dos cenários (o seletor busca os demais com buscarPlanos). */
   planos: Plano[];
   operadoras: Operadora[];
   hospitais: Hospital[];
+  cidades: string[];
+  fonte: "ans" | "ficticio";
   mensagemPadrao: string;
   drawer?: string;
-  operadorasHabilitadas?: string[];
 }
 
 export function CotacaoEditor({
@@ -70,16 +74,18 @@ export function CotacaoEditor({
   planos,
   operadoras,
   hospitais,
+  cidades,
+  fonte,
   mensagemPadrao,
   drawer,
-  operadorasHabilitadas,
 }: Props) {
   const router = useRouter();
   const path = usePathname();
   const abrir = (d?: string) => router.replace(d ? `${path}?d=${d}` : path, { scroll: false });
   const opMap = useMemo(() => Object.fromEntries(operadoras.map((o) => [o.id, o])), [operadoras]);
   const planoMap = useMemo(() => Object.fromEntries(planos.map((p) => [p.id, p])), [planos]);
-  const cenarios = cotacao.cenarios.filter((c) => planoMap[c.planoId]);
+  // Cenários cujo plano saiu do catálogo (ex.: cotação antiga com dados fictícios) viram "Plano indisponível".
+  const cenarios = cotacao.cenarios.filter((c) => planoMap[c.planoId] && opMap[planoMap[c.planoId].operadoraId]);
   const vidas = totalVidas(cotacao.grupos);
 
   function imprimir() {
@@ -135,8 +141,10 @@ export function CotacaoEditor({
       <div className="flex flex-col gap-8 sm:flex-row">
         <div className="flex-1">
           <div className="grid gap-4 sm:grid-cols-[repeat(auto-fit,_minmax(210px,_max-content))] sm:justify-start">
-            {cenarios.map((c) => {
+            {cotacao.cenarios.map((c) => {
               const plano = planoMap[c.planoId];
+              if (!plano || !opMap[plano.operadoraId])
+                return <PlanoIndisponivel key={c.id} onRemove={() => onPlanoRemove(cotacao.id, c.id)} />;
               return (
                 <PlanoCard
                   key={c.id}
@@ -210,11 +218,8 @@ export function CotacaoEditor({
         open={drawer === "cenarios"}
         onClose={() => abrir()}
         cotacao={cotacao}
-        planos={planos}
-        operadoras={
-          operadorasHabilitadas?.length ? operadoras.filter((o) => operadorasHabilitadas.includes(o.id)) : operadoras
-        }
-        hospitais={hospitais}
+        cidades={cidades}
+        fonte={fonte}
       />
       <CompartilharDialog
         open={drawer === "share"}
@@ -326,11 +331,7 @@ function PlanoCard({
               {plano.segmento} {plano.modalidade}
             </li>
             <li>{plano.acomodacao === "Quarto Individual" ? "Apartamento" : "Enfermaria"}</li>
-            <li>
-              {plano.coparticipacao === "Com coparticipação"
-                ? `Coparticipação ${plano.percentualCopart ?? ""}%`
-                : "Sem coparticipação"}
-            </li>
+            <li>{rotuloCopart(plano)}</li>
             {plano.rede.length > 0 && (
               <li className="hidden sm:block">
                 <button onClick={onHospitais} className="flex items-center gap-1 transition-colors hover:text-primary">
@@ -346,11 +347,30 @@ function PlanoCard({
             <span className="text-2xl font-semibold text-primary">{numero(total)}</span>
             <span className="text-xs">/mês</span>
           </div>
+          <OrigemPreco plano={plano} />
           <Link href={href} target="_blank" className={buttonClass({ variant: "outline" }, "w-32 sm:w-full")}>
             Ver detalhes
           </Link>
         </div>
       </div>
+    </div>
+  );
+}
+
+function rotuloCopart(p: Plano) {
+  if (p.coparticipacao !== "Com coparticipação") return "Sem coparticipação";
+  return p.percentualCopart != null ? `Coparticipação ${p.percentualCopart}%` : "Com coparticipação";
+}
+
+function PlanoIndisponivel({ onRemove }: { onRemove: () => void }) {
+  return (
+    <div className="flex min-h-[330px] flex-col items-center justify-center gap-3 rounded border-2 border-dashed bg-background p-4 text-center text-sm text-muted-foreground sm:w-[210px]">
+      <AlertTriangle className="size-6 text-amber-500" />
+      <div className="font-medium text-foreground">Plano indisponível</div>
+      <p className="text-xs">Este plano não está mais no catálogo atual.</p>
+      <Button variant="outline" size="sm" onClick={onRemove}>
+        <Trash2 className="size-4" /> Remover
+      </Button>
     </div>
   );
 }
@@ -499,16 +519,14 @@ function SeletorPlanos({
   open,
   onClose,
   cotacao,
-  planos,
-  operadoras,
-  hospitais,
+  cidades,
+  fonte,
 }: {
   open: boolean;
   onClose: () => void;
   cotacao: Cotacao;
-  planos: Plano[];
-  operadoras: Operadora[];
-  hospitais: Hospital[];
+  cidades: string[];
+  fonte: "ans" | "ficticio";
 }) {
   const [perfil, setPerfil] = useState<Perfil>("Indiferente");
   const [faixaValor, setFaixaValor] = useState<{ min?: number; max?: number }>({});
@@ -522,29 +540,47 @@ function SeletorPlanos({
   }>({});
   const [opSel, setOpSel] = useState<string | null>(null);
   const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [todas, setTodas] = useState(false);
+  const [dados, setDados] = useState<Selecao | null>(null);
+  const [carregando, setCarregando] = useState(false);
   const [pending, start] = useTransition();
   const jaNaCotacao = new Set(cotacao.cenarios.map((c) => c.planoId));
+  // A ANS não publica tipo de contratação nem aceitação de MEI: esses filtros só existem nos dados fictícios.
+  const filtrosFicticios = fonte === "ficticio";
 
-  const opIds = new Set(operadoras.map((o) => o.id));
+  // Busca no servidor ao abrir e a cada mudança de segmento, modalidade, cidade ou distribuição de vidas.
+  const gruposJson = JSON.stringify(cotacao.grupos);
+  useEffect(() => {
+    if (!open) return;
+    let ativo = true;
+    setCarregando(true);
+    buscarPlanos(filtro, JSON.parse(gruposJson), { todas })
+      .then((r) => ativo && setDados(r))
+      .finally(() => ativo && setCarregando(false));
+    return () => {
+      ativo = false;
+    };
+  }, [open, filtro, gruposJson, todas]);
+
+  const planos = dados?.planos ?? [];
+  const operadoras = dados?.operadoras ?? [];
+  const hospitais = dados?.hospitais ?? [];
   const base = planos.filter(
     (p) =>
-      opIds.has(p.operadoraId) &&
-      p.segmento === filtro.segmento &&
-      p.modalidade === filtro.modalidade &&
-      p.cidades.includes(filtro.cidade) &&
-      (!extra.mei || p.aceitaMei) &&
+      (!filtrosFicticios || !extra.mei || p.aceitaMei) &&
       (!extra.acomodacao || p.acomodacao === extra.acomodacao) &&
       (!extra.coparticipacao || p.coparticipacao === extra.coparticipacao) &&
-      (!extra.contratacao || p.contratacao === extra.contratacao),
+      (!filtrosFicticios || !extra.contratacao || p.contratacao === extra.contratacao),
   );
+  const totais = new Map(base.map((p) => [p.id, precoTotal(p, cotacao.grupos)]));
   // Perfil do cliente: divide os planos da região em terços pelo preço total.
-  const ordenados = [...base].map((p) => precoTotal(p, cotacao.grupos)).sort((a, b) => a - b);
+  const ordenados = [...totais.values()].sort((a, b) => a - b);
   const corte1 = ordenados[Math.floor(ordenados.length / 3)] ?? 0;
   const corte2 = ordenados[Math.floor((ordenados.length * 2) / 3)] ?? 0;
   const perfilDe = (v: number): Perfil => (v < corte1 ? "Econômico" : v < corte2 ? "Intermediário" : "Premium");
   const hospDisponiveis = hospitais.filter((h) => base.some((p) => p.rede.some((r) => r.hospitalId === h.id)));
   const filtrados = base.filter((p) => {
-    const v = precoTotal(p, cotacao.grupos);
+    const v = totais.get(p.id)!;
     return (
       (perfil === "Indiferente" || perfilDe(v) === perfil) &&
       (faixaValor.min == null || v >= faixaValor.min) &&
@@ -554,6 +590,7 @@ function SeletorPlanos({
   });
   const ops = operadoras.filter((o) => filtrados.some((p) => p.operadoraId === o.id));
   const op = ops.find((o) => o.id === opSel);
+  const operadoraDoPlano = new Map(planos.map((p) => [p.id, p.operadoraId]));
 
   function set<K extends keyof FiltroCotacao>(k: K, v: FiltroCotacao[K]) {
     const f = { ...filtro, [k]: v };
@@ -587,12 +624,8 @@ function SeletorPlanos({
               value={filtro.modalidade}
               onChange={(v: Modalidade) => set("modalidade", v)}
             />
-            <Select value={filtro.cidade} onChange={(e) => set("cidade", e.target.value)}>
-              {CIDADES.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </Select>
-            {filtro.modalidade === "PME" && (
+            <SeletorCidade cidades={cidades} value={filtro.cidade} onChange={(c) => set("cidade", c)} />
+            {filtrosFicticios && filtro.modalidade === "PME" && (
               <FiltroLista
                 titulo="MEI"
                 itens={["Aceita MEI"]}
@@ -612,12 +645,14 @@ function SeletorPlanos({
               ativo={extra.coparticipacao}
               onClick={(v) => toggleExtra("coparticipacao", v)}
             />
-            <FiltroLista
-              titulo="Contratação"
-              itens={FILTROS.contratacao}
-              ativo={extra.contratacao}
-              onClick={(v) => toggleExtra("contratacao", v)}
-            />
+            {filtrosFicticios && (
+              <FiltroLista
+                titulo="Contratação"
+                itens={FILTROS.contratacao}
+                ativo={extra.contratacao}
+                onClick={(v) => toggleExtra("contratacao", v)}
+              />
+            )}
             <FiltroLista
               titulo="Perfil do cliente"
               itens={PERFIS}
@@ -671,7 +706,7 @@ function SeletorPlanos({
               <ul className="mt-2 space-y-1 text-sm">
                 {hospPref.map((id) => (
                   <li key={id} className="flex items-center justify-between gap-2">
-                    <span className="truncate">{hospitais.find((h) => h.id === id)?.nome}</span>
+                    <span className="truncate">{hospitais.find((h) => h.id === id)?.nome ?? id}</span>
                     <button
                       className="text-muted-foreground hover:text-destructive"
                       onClick={() => setHospPref((h) => h.filter((x) => x !== id))}
@@ -682,21 +717,48 @@ function SeletorPlanos({
                 ))}
               </ul>
             </div>
+            <label className="flex items-center gap-2 px-2 text-sm">
+              <input
+                type="checkbox"
+                checked={todas}
+                onChange={(e) => {
+                  setTodas(e.target.checked);
+                  setOpSel(null);
+                }}
+                className="size-4 accent-[hsl(var(--primary))]"
+              />
+              Mostrar todas as operadoras
+            </label>
             <div className="px-2">
               <AssistenteIA />
             </div>
           </div>
 
           <div className="flex-1">
-            {!op ? (
+            {carregando && !dados ? (
+              <p className="text-center text-sm text-muted-foreground">Carregando…</p>
+            ) : !op ? (
               ops.length ? (
-                <div className="grid grid-cols-[repeat(auto-fit,_minmax(124px,_max-content))] justify-center gap-4">
+                <div
+                  className={cn(
+                    "grid grid-cols-[repeat(auto-fit,_minmax(136px,_max-content))] justify-center gap-4",
+                    carregando && "opacity-50",
+                  )}
+                  aria-busy={carregando}
+                >
                   {ops.map((o) => {
-                    const n = selecionados.filter((id) => planos.find((p) => p.id === id)?.operadoraId === o.id).length;
+                    const n = selecionados.filter((id) => operadoraDoPlano.get(id) === o.id).length;
+                    const qtd = filtrados.filter((p) => p.operadoraId === o.id).length;
                     return (
-                      <button key={o.id} onClick={() => setOpSel(o.id)} className="relative">
-                        <div className="grid h-24 w-32 place-items-center rounded border p-4 duration-300 animate-in fade-in-25 hover:shadow-sm">
-                          <OperadoraLogo op={o} className="text-lg leading-tight" />
+                      <button key={o.id} onClick={() => setOpSel(o.id)} className="relative" data-operadora={o.id}>
+                        <div className="flex h-28 w-36 flex-col items-center justify-center gap-2 rounded border p-3 text-center duration-300 animate-in fade-in-25 hover:shadow-sm">
+                          <OperadoraIcone op={o} tamanho={40} />
+                          <span className="line-clamp-2 text-xs font-semibold leading-tight" style={{ color: o.cor }}>
+                            {o.nome}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            {qtd} plano{qtd === 1 ? "" : "s"}
+                          </span>
                         </div>
                         {n > 0 && (
                           <span className="absolute -right-2 -top-2 grid size-6 place-items-center rounded-full bg-primary text-xs text-primary-foreground">
@@ -707,6 +769,8 @@ function SeletorPlanos({
                     );
                   })}
                 </div>
+              ) : carregando ? (
+                <p className="text-center text-sm text-muted-foreground">Carregando…</p>
               ) : (
                 <p className="text-center text-sm text-muted-foreground">
                   Não conseguimos localizar nenhum plano disponível. Por favor, confira as opções de filtro e tente
@@ -718,7 +782,17 @@ function SeletorPlanos({
                 <button onClick={() => setOpSel(null)} className="flex items-center gap-2 text-sm text-primary">
                   <ArrowLeft className="h-4" /> Todas as operadoras
                 </button>
-                <OperadoraLogo op={op} className="text-3xl" />
+                <div className="flex items-center gap-4">
+                  <OperadoraLogo op={op} tamanho={40} className="text-2xl" />
+                  {op.idss != null && (
+                    <span
+                      className="ml-auto text-xs text-muted-foreground"
+                      title="Índice de Desempenho da Saúde Suplementar (ANS)"
+                    >
+                      IDSS {numero(op.idss, 4)}
+                    </span>
+                  )}
+                </div>
                 <div className="divide-y rounded border">
                   {filtrados
                     .filter((p) => p.operadoraId === op.id)
@@ -740,20 +814,18 @@ function SeletorPlanos({
                             onChange={() => setSelecionados((s) => (sel ? s.filter((x) => x !== p.id) : [...s, p.id]))}
                             className="size-4 accent-[hsl(var(--primary))]"
                           />
-                          <div className="flex-1">
+                          <div className="min-w-0 flex-1">
                             <div className="font-medium">{p.nome}</div>
                             <div className="text-xs text-muted-foreground">
-                              {p.acomodacao} · {p.coparticipacao}
-                              {p.percentualCopart ? ` ${p.percentualCopart}%` : ""} · {p.abrangencia} · {p.rede.length}{" "}
-                              hospitais
+                              {p.acomodacao} · {rotuloCopart(p)} · {p.abrangencia} · {p.rede.length} hospitais
+                              {op.idss != null ? ` · IDSS ${numero(op.idss, 4)}` : ""}
                             </div>
                           </div>
                           <div className="text-right">
                             <span className="text-xs">R$ </span>
-                            <span className="text-lg font-semibold text-primary">
-                              {numero(precoTotal(p, cotacao.grupos))}
-                            </span>
+                            <span className="text-lg font-semibold text-primary">{numero(totais.get(p.id)!)}</span>
                             <div className="text-xs text-muted-foreground">{ja ? "já na cotação" : "/mês"}</div>
+                            <OrigemPreco plano={p} className="block" />
                           </div>
                         </label>
                       );
@@ -783,6 +855,42 @@ function SeletorPlanos({
         </Button>
       </div>
     </Drawer>
+  );
+}
+
+/** Cidade com busca (datalist): o catálogo ANS tem centenas de municípios. Só aceita rótulos da lista. */
+function SeletorCidade({
+  cidades,
+  value,
+  onChange,
+}: {
+  cidades: string[];
+  value: string;
+  onChange: (c: string) => void;
+}) {
+  const [texto, setTexto] = useState(value);
+  useEffect(() => setTexto(value), [value]);
+  const existe = (c: string) => cidades.includes(c);
+  return (
+    <div>
+      <Input
+        list="cidades-catalogo"
+        aria-label="Cidade"
+        value={texto}
+        placeholder="Cidade..."
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => {
+          setTexto(e.target.value);
+          if (existe(e.target.value) && e.target.value !== value) onChange(e.target.value);
+        }}
+        onBlur={() => !existe(texto) && setTexto(value)}
+      />
+      <datalist id="cidades-catalogo">
+        {cidades.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
+    </div>
   );
 }
 
@@ -1066,8 +1174,8 @@ function AssistenteIA() {
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Assistente IA">
         <p className="text-sm text-muted-foreground">
-          No Painel, o assistente sugere planos a partir de uma descrição do cliente. Neste estudo ele ainda não está
-          ligado a um modelo; use os filtros de perfil, faixa de valor e hospitais ao lado.
+          O assistente vai sugerir planos a partir de uma descrição do cliente. Ele ainda não está ligado a um modelo;
+          por enquanto, use os filtros de perfil, faixa de valor e hospitais ao lado.
         </p>
       </Modal>
     </>

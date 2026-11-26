@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { OperadoraLogo } from "@/components/brand";
-import { Imprimir, RegistrarVisualizacao } from "@/components/proposta";
+import { OperadoraLogo, OrigemPreco } from "@/components/brand";
+import { Imprimir, PlanoIndisponivel, RegistrarVisualizacao } from "@/components/proposta";
 import { buttonClass } from "@/lib/button";
+import { operadoraPorId, planoPorId } from "@/lib/catalogo";
 import { readDb } from "@/lib/db";
 import { OPCOES_PADRAO } from "@/lib/types";
 import { numero, precoTotal, totalVidas } from "@/lib/utils";
@@ -33,6 +34,11 @@ export default async function Proposta({
       </div>
     );
   const cenarios = [...c.cenarios].sort((a, b) => Number(!!b.destaque) - Number(!!a.destaque));
+  const itens = cenarios.map((cen) => {
+    const p = planoPorId(cen.planoId);
+    const op = p && operadoraPorId(p.operadoraId);
+    return { cen, p: op ? p : undefined, op };
+  });
   return (
     <>
       <RegistrarVisualizacao cotacaoId={c.id} preview={!!preview} />
@@ -46,14 +52,13 @@ export default async function Proposta({
       <div className="mb-8">
         <h1 className="text-2xl font-bold">{c.titulo}</h1>
         <p className="text-sm text-muted-foreground">
-          {cenarios.length} opções de planos para {totalVidas(c.grupos)} vidas
+          {itens.filter((x) => x.p).length} opções de planos para {totalVidas(c.grupos)} vidas
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-[repeat(auto-fill,_minmax(230px,_1fr))]">
-        {cenarios.map((cen) => {
-          const p = db.planos.find((x) => x.id === cen.planoId);
-          if (!p) return null;
-          const op = db.operadoras.find((o) => o.id === p.operadoraId)!;
+        {itens.map(({ cen, p, op }) => {
+          if (!p || !op)
+            return <PlanoIndisponivel key={cen.id} cotacaoId={c.id} cenarioId={cen.id} removivel={!!preview} />;
           return (
             <div
               key={cen.id}
@@ -82,6 +87,7 @@ export default async function Proposta({
                   <span className="text-xs">/mês</span>
                 </div>
               )}
+              {o.valores && <OrigemPreco plano={p} className="-mt-3" />}
               <Link
                 href={`/cotacoes/${c.id}/cenarios/${cen.id}${q}`}
                 className={buttonClass({ variant: "outline" }, "mt-auto print:hidden")}

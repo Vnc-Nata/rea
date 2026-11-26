@@ -2,19 +2,45 @@
 
 import { ArrowLeft, ChevronDown, Printer, Users, Wallet } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { buscarPlanos } from "@/app/actions";
+import type { Selecao } from "@/lib/selecao";
 import type { Hospital, Modalidade, Operadora, Plano, Segmento } from "@/lib/types";
 import { FAIXAS, faixaLabel } from "@/lib/types";
-import { CIDADES } from "@/lib/seed";
 import { cn, moeda } from "@/lib/utils";
-import { OperadoraLogo } from "./brand";
-import { Button, Input, Panel, Select, ToggleGroup } from "./ui";
+import { OperadoraLogo, OrigemPreco } from "./brand";
+import { Button, Input, Panel, ToggleGroup } from "./ui";
 
-export function ProdutosGrid({ operadoras, planos }: { operadoras: Operadora[]; planos: Plano[] }) {
+export function ProdutosGrid({
+  cidades,
+  cidadeInicial,
+  fonte,
+}: {
+  cidades: string[];
+  cidadeInicial: string;
+  fonte: "ans" | "ficticio";
+}) {
   const [q, setQ] = useState("");
   const [segmento, setSegmento] = useState<Segmento>("Saúde");
   const [modalidade, setModalidade] = useState<Modalidade>("PME");
-  const [cidade, setCidade] = useState("São Paulo - SP");
+  const [cidade, setCidade] = useState(cidadeInicial);
+  const [texto, setTexto] = useState(cidadeInicial);
+  const [dados, setDados] = useState<Selecao | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  // A ANS não publica tipo de contratação nem aceitação de MEI: filtros só nos dados fictícios.
+  const ficticio = fonte === "ficticio";
+  useEffect(() => {
+    let ativo = true;
+    setCarregando(true);
+    buscarPlanos({ segmento, modalidade, cidade }, [])
+      .then((r) => ativo && setDados(r))
+      .finally(() => ativo && setCarregando(false));
+    return () => {
+      ativo = false;
+    };
+  }, [segmento, modalidade, cidade]);
+  const planos = dados?.planos ?? [];
+  const operadoras = dados?.operadoras ?? [];
   const [acomodacao, setAcomodacao] = useState("");
   const [copart, setCopart] = useState("");
   const [mei, setMei] = useState("");
@@ -25,16 +51,16 @@ export function ProdutosGrid({ operadoras, planos }: { operadoras: Operadora[]; 
     p.cidades.includes(cidade) &&
     (!acomodacao || p.acomodacao === acomodacao) &&
     (!copart || p.coparticipacao === copart) &&
-    (!mei || (modalidade === "PME" && p.aceitaMei)) &&
-    (!contratacao || p.contratacao === contratacao) &&
+    (!ficticio || !mei || (modalidade === "PME" && p.aceitaMei)) &&
+    (!ficticio || !contratacao || p.contratacao === contratacao) &&
     (!q || p.nome.toLowerCase().includes(q.toLowerCase()));
   const ops = operadoras.filter((o) => planos.some((p) => p.operadoraId === o.id && ok(p)));
   const qs = new URLSearchParams({
     modalidade,
     segmento,
     cidade,
-    ...(mei && modalidade === "PME" ? { mei: "1" } : {}),
-    ...(contratacao ? { contratacao } : {}),
+    ...(ficticio && mei && modalidade === "PME" ? { mei: "1" } : {}),
+    ...(ficticio && contratacao ? { contratacao } : {}),
   }).toString();
   const Lista = ({
     titulo,
@@ -69,11 +95,22 @@ export function ProdutosGrid({ operadoras, planos }: { operadoras: Operadora[]; 
         <Input placeholder="Procurar um plano..." value={q} onChange={(e) => setQ(e.target.value)} />
         <ToggleGroup options={["Saúde", "Dental"] as const} value={segmento} onChange={setSegmento} />
         <ToggleGroup options={["PF", "PME", "Adesão"] as const} value={modalidade} onChange={setModalidade} />
-        <Select value={cidade} onChange={(e) => setCidade(e.target.value)}>
-          {CIDADES.map((c) => (
-            <option key={c}>{c}</option>
+        <Input
+          list="produtos-cidades"
+          aria-label="Cidade"
+          value={texto}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => {
+            setTexto(e.target.value);
+            if (cidades.includes(e.target.value)) setCidade(e.target.value);
+          }}
+          onBlur={() => !cidades.includes(texto) && setTexto(cidade)}
+        />
+        <datalist id="produtos-cidades">
+          {cidades.map((c) => (
+            <option key={c} value={c} />
           ))}
-        </Select>
+        </datalist>
         <Lista
           titulo="Acomodação"
           itens={["Quarto Coletivo", "Quarto Individual"]}
@@ -86,22 +123,28 @@ export function ProdutosGrid({ operadoras, planos }: { operadoras: Operadora[]; 
           v={copart}
           set={setCopart}
         />
-        {modalidade === "PME" && <Lista titulo="MEI" itens={["Aceita MEI"]} v={mei} set={setMei} />}
-        <Lista titulo="Contratação" itens={["Opcional", "Compulsória"]} v={contratacao} set={setContratacao} />
+        {ficticio && modalidade === "PME" && <Lista titulo="MEI" itens={["Aceita MEI"]} v={mei} set={setMei} />}
+        {ficticio && (
+          <Lista titulo="Contratação" itens={["Opcional", "Compulsória"]} v={contratacao} set={setContratacao} />
+        )}
       </div>
       <div className="flex-1">
-        <div className="grid grid-cols-[repeat(auto-fill,_minmax(140px,_1fr))] gap-4">
+        <div
+          className={cn("grid grid-cols-[repeat(auto-fill,_minmax(140px,_1fr))] gap-4", carregando && "opacity-50")}
+          aria-busy={carregando}
+        >
           {ops.map((o) => (
             <Link
               key={o.id}
               href={`/produtos/${o.id}?${qs}`}
               className="grid h-24 place-items-center rounded border p-4 text-center duration-300 animate-in fade-in-25 hover:shadow-sm"
             >
-              <OperadoraLogo op={o} className="text-lg leading-tight" />
+              <OperadoraLogo op={o} className="text-base leading-tight" />
             </Link>
           ))}
         </div>
-        {!ops.length && (
+        {carregando && !dados && <p className="text-center text-sm text-muted-foreground">Carregando…</p>}
+        {!carregando && !ops.length && (
           <p className="text-center text-sm text-muted-foreground">Nenhum produto encontrado com esses filtros.</p>
         )}
       </div>
@@ -114,11 +157,13 @@ export function ProdutoDetalhe({
   planos,
   hospitais,
   titulo,
+  ficticio,
 }: {
   op: Operadora;
   planos: Plano[];
   hospitais: Hospital[];
   titulo: string;
+  ficticio: boolean;
 }) {
   const [aba, setAba] = useState<"Preços" | "Rede credenciada" | "Mais informações">("Preços");
   const [aberto, setAberto] = useState<string | null>(null);
@@ -172,10 +217,13 @@ export function ProdutoDetalhe({
                     </span>
                     <span className="flex items-center gap-1">
                       <Wallet className="h-3" />
-                      {p.coparticipacao === "Com coparticipação"
-                        ? `Coparticipação ${p.percentualCopart}%`
-                        : "Sem coparticipação"}
+                      {p.coparticipacao !== "Com coparticipação"
+                        ? "Sem coparticipação"
+                        : p.percentualCopart != null
+                          ? `Coparticipação ${p.percentualCopart}%`
+                          : "Com coparticipação"}
                     </span>
+                    <OrigemPreco plano={p} />
                   </div>
                 </div>
                 <ChevronDown className={cn("h-4 transition-transform", aberto === p.id && "rotate-180")} />
@@ -213,7 +261,9 @@ export function ProdutoDetalhe({
         {aba === "Mais informações" && (
           <div className="space-y-2 py-2 text-sm text-muted-foreground">
             <p>Razão social: {op.razaoSocial}</p>
-            <p>Registro (fictício): {op.registroAns}</p>
+            <p>
+              Registro ANS{ficticio ? " (fictício)" : ""}: {op.registroAns}
+            </p>
             <p>
               IDSS: {op.idss != null ? op.idss.toFixed(4) : "—"} · Reajuste anual:{" "}
               {op.reajuste != null ? `${op.reajuste.toFixed(1)}%` : "—"}

@@ -1,5 +1,6 @@
 import { Mail, MessageCircle } from "lucide-react";
 import { ThemeSwitch } from "@/components/theme";
+import { catalogo } from "@/lib/catalogo";
 import { readDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 // Layout público da proposta (visto pelo cliente final), sem a barra lateral do painel.
 export default function PropostaLayout({ children }: { children: React.ReactNode }) {
   const { perfil } = readDb();
+  const ficticio = catalogo().fonte === "ficticio";
   const tel = perfil.telefone.replace(/\D/g, "");
   const contatos = (
     <ul className="flex gap-3">
@@ -42,7 +44,9 @@ export default function PropostaLayout({ children }: { children: React.ReactNode
           <div className="grid gap-1 text-foreground/70">
             <div className="font-semibold uppercase">{perfil.corretora}</div>
             <p className="text-xs">
-              Informativo referencial: valores e condições fictícios, gerados para estudo. Não constituem oferta.
+              {ficticio
+                ? "Informativo referencial: valores e condições fictícios, gerados para estudo. Não constituem oferta."
+                : "Informativo referencial: valores sujeitos a confirmação pela operadora. Não constituem oferta."}
             </p>
           </div>
           <div className="flex place-content-center items-center gap-4 sm:justify-end">

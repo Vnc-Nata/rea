@@ -6,9 +6,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { updateDb } from "@/lib/db";
-import { contaPadrao } from "@/lib/conta-db";
-import type { Conta, Db, Faixa, FiltroCotacao, OpcoesEnvio, Perfil, Usuario } from "@/lib/types";
+import { catalogo, registrosAlvo } from "@/lib/catalogo";
+import { readDb, updateDb } from "@/lib/db";
+import { contaPadrao, lerConta } from "@/lib/conta-db";
+import { CIDADE_PADRAO, cidadeValida, filtrarSelecao, habilitadasEfetivas, type Selecao } from "@/lib/selecao";
+import type { Conta, Db, Faixa, FiltroCotacao, Grupo, OpcoesEnvio, Perfil, Usuario } from "@/lib/types";
 import { vidasVazias } from "@/lib/types";
 import { novoId } from "@/lib/utils";
 
@@ -29,7 +31,7 @@ export async function create(formData: FormData) {
       cnpj: "",
       grupos: [{ nome: "Geral", vidas }],
       cenarios: [],
-      filtro: { segmento: "Saúde", modalidade: "PME", cidade: "São Paulo - SP" },
+      filtro: { segmento: "Saúde", modalidade: "PME", cidade: cidadeValida(CIDADE_PADRAO, catalogo().cidades) },
       eventos: [{ tipo: "Criada", em: agora, por: db.perfil.usuario }],
       visualizacoes: 0,
     });
@@ -69,6 +71,22 @@ export async function updateFiltro(cotacaoId: string, filtro: FiltroCotacao) {
     const c = db.cotacoes.find((c) => c.id === cotacaoId);
     if (c) c.filtro = filtro;
   });
+}
+
+/**
+ * Planos do catálogo para o seletor: filtro da cotação, só com preço nas faixas que têm vidas,
+ * só operadoras habilitadas na conta (ou todas com `todas`). Não envia o catálogo inteiro.
+ */
+export async function buscarPlanos(
+  filtro: FiltroCotacao,
+  grupos: Grupo[],
+  opts: { todas?: boolean } = {},
+): Promise<Selecao> {
+  const cat = catalogo();
+  const habilitadas = opts.todas
+    ? cat.operadoras.map((o) => o.id)
+    : habilitadasEfetivas(lerConta(readDb()).operadorasHabilitadas, cat.fonte, cat.operadoras, registrosAlvo());
+  return filtrarSelecao(cat, filtro, grupos, new Set(habilitadas));
 }
 
 export async function onPlanoSelect(cotacaoId: string, planoIds: string[]) {
@@ -269,4 +287,19 @@ export async function updatePreferencias(operadorasHabilitadas: string[], maisIn
     conta.maisInfoRelevantes = maisInfoRelevantes;
   });
   revalidatePath("/", "layout");
+}
+
+/** Ajuste % sobre o VCM da operadora (Conta.ajustes); 0 remove o ajuste. */
+export async function aplicarAjuste(operadoraId: string, pct: number): Promise<Result> {
+  if (!Number.isFinite(pct) || pct <= -100 || pct > 500)
+    return { success: false, error: "Informe um ajuste entre -99% e 500%." };
+  const v = Math.round(pct * 100) / 100;
+  comConta((conta) => {
+    const ajustes = { ...(conta.ajustes ?? {}) };
+    if (v === 0) delete ajustes[operadoraId];
+    else ajustes[operadoraId] = v;
+    conta.ajustes = ajustes;
+  });
+  revalidatePath("/", "layout");
+  return { success: true };
 }

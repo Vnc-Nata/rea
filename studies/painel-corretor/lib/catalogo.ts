@@ -341,6 +341,24 @@ export function planosPara(f: FiltroCotacao): Plano[] {
   );
 }
 
+let cacheAlvo: { mtime: number; registros: string[] } | null = null;
+
+/** Registros de data/ans/operadoras-alvo.json (habilitadas por padrão no catálogo ANS). */
+export function registrosAlvo(): string[] {
+  const arq = path.join(process.cwd(), "data", "ans", "operadoras-alvo.json");
+  const m = mtime(arq);
+  if (cacheAlvo?.mtime === m) return cacheAlvo.registros;
+  let registros: string[] = [];
+  try {
+    const lista = JSON.parse(fs.readFileSync(arq, "utf8")) as { registros: string[] }[];
+    registros = lista.flatMap((g) => g.registros);
+  } catch {
+    registros = [];
+  }
+  cacheAlvo = { mtime: m, registros };
+  return registros;
+}
+
 export function planoPorId(id: string): Plano | undefined {
   return catalogo().planos.find((p) => p.id === id);
 }

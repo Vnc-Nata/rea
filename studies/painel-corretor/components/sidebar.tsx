@@ -1,6 +1,18 @@
 "use client";
 
-import { Bell, Briefcase, Database, FolderOpen, LayoutGrid, Menu, Settings, User, Wallet, X } from "lucide-react";
+import {
+  Bell,
+  Briefcase,
+  Columns3,
+  Database,
+  FolderOpen,
+  LayoutGrid,
+  Menu,
+  Settings,
+  User,
+  Wallet,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useState } from "react";
@@ -18,6 +30,7 @@ export function NavProvider({ children }: { children: React.ReactNode }) {
 
 const LINKS = [
   { href: "/cotacoes", label: "Cotações", icon: Wallet },
+  { href: "/comparar", label: "Comparar", icon: Columns3 },
   { href: "/busca-ans", label: "Busca ANS", icon: FolderOpen, beta: true },
   { href: "/produtos", label: "Produtos", icon: LayoutGrid },
   { href: "/base-ans", label: "Base ANS", icon: Database, beta: true },

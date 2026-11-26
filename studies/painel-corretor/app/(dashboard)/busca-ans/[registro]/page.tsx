@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { AnsHeader, BuscaAnsDetalhe } from "@/components/busca-ans";
 import { BuscaAnsRealDetalhe } from "@/components/busca-ans-real";
-import { lerBaseAns } from "@/lib/ans";
-import { readDb } from "@/lib/db";
+import { lerBaseAns, lerIndicadoresAns, lerRedeAns } from "@/lib/ans";
+import { catalogo } from "@/lib/catalogo";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +17,16 @@ export default async function BuscaAnsOperadora({
   const sp = await searchParams;
   const base = lerBaseAns();
   if (base?.operadoras.some((o) => o.registroAns === registro))
-    return <BuscaAnsRealDetalhe base={base} registro={registro} sp={sp} />;
-  const db = readDb();
+    return (
+      <BuscaAnsRealDetalhe
+        base={base}
+        registro={registro}
+        sp={sp}
+        indicadores={lerIndicadoresAns()}
+        rede={lerRedeAns()}
+      />
+    );
+  const db = catalogo(); // sem base ANS: catálogo fictício
   const op = db.operadoras.find((o) => o.registroAns === registro);
   if (!op) notFound();
   const planos = db.planos

@@ -1,11 +1,12 @@
 "use client";
 
-import { ExternalLink, FlaskConical, Hospital as HospitalIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { registrarEvento, updateComentario } from "@/app/actions";
+import { AlertTriangle, ExternalLink, FlaskConical, Hospital as HospitalIcon, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { onPlanoRemove, registrarEvento, updateComentario } from "@/app/actions";
 import type { Hospital, Operadora, Plano } from "@/lib/types";
 import { Comparativo } from "./cotacao-editor";
-import { Modal } from "./ui";
+import { Button, Modal } from "./ui";
 
 export function Imprimir({ ativo }: { ativo: boolean }) {
   useEffect(() => {
@@ -22,6 +23,42 @@ export function RegistrarVisualizacao({ cotacaoId, preview }: { cotacaoId: strin
     registrarEvento(cotacaoId);
   }, [cotacaoId, preview]);
   return null;
+}
+
+/** Cenário cujo plano não está no catálogo atual. Remover só na visão do corretor (preview). */
+export function PlanoIndisponivel({
+  cotacaoId,
+  cenarioId,
+  removivel,
+}: {
+  cotacaoId: string;
+  cenarioId: string;
+  removivel: boolean;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 rounded border-2 border-dashed bg-background p-6 text-center text-sm text-muted-foreground">
+      <AlertTriangle className="size-6 text-amber-500" />
+      <div className="font-medium text-foreground">Plano indisponível</div>
+      <p className="text-xs">Este plano não está mais disponível.</p>
+      {removivel && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              await onPlanoRemove(cotacaoId, cenarioId);
+              router.refresh();
+            })
+          }
+        >
+          <Trash2 className="size-4" /> Remover
+        </Button>
+      )}
+    </div>
+  );
 }
 
 export function Comentario({ cotacaoId, cenarioId, value, editavel }: { cotacaoId: string; cenarioId: string; value: string; editavel: boolean }) {
@@ -46,7 +83,7 @@ export function CoparticipacaoDetalhes() {
       <Modal open={open} onClose={() => setOpen(false)} title="Coparticipação">
         <p className="text-sm text-muted-foreground">
           Nos planos com coparticipação o beneficiário paga um percentual de cada consulta, exame ou procedimento
-          realizado, além da mensalidade. Os percentuais e limites aqui são fictícios.
+          realizado, além da mensalidade. Percentuais e limites constam no contrato do plano.
         </p>
       </Modal>
     </>
@@ -70,7 +107,13 @@ export function RedeCards({ plano, op, hospitais }: { plano: Plano; op: Operador
   return (
     <>
       <Card titulo={`${plano.rede.length} Hospitais`} texto="Confira os principais hospitais da rede." icon={<HospitalIcon />} />
-      <Card titulo={`${plano.laboratorios} Laboratórios`} texto="Confira os principais laboratórios da rede." icon={<FlaskConical />} />
+      {plano.laboratorios > 0 && (
+        <Card
+          titulo={`${plano.laboratorios} Laboratórios`}
+          texto="Confira os principais laboratórios da rede."
+          icon={<FlaskConical />}
+        />
+      )}
       <Comparativo open={open} onClose={() => setOpen(false)} planos={[plano]} opMap={{ [op.id]: op }} hospitais={hospitais} />
     </>
   );

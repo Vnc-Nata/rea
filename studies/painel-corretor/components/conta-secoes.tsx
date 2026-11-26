@@ -2,9 +2,10 @@
 
 import { FotoUpload } from "./foto-upload";
 import { Copy, KeyRound, Plus, Trash2 } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import {
   addLicencas,
+  aplicarAjuste,
   convidarUsuario,
   criarEquipe,
   excluirEquipe,
@@ -15,6 +16,7 @@ import {
 } from "@/app/actions";
 import type { Conta, Operadora } from "@/lib/types";
 import { cn, moeda } from "@/lib/utils";
+import { OperadoraIcone } from "./brand";
 import { Button, Input, Label, Modal, Select, useToast } from "./ui";
 
 function Secao({ titulo, descricao, children }: { titulo: string; descricao?: string; children: React.ReactNode }) {
@@ -394,21 +396,55 @@ export function Integracoes({ conta }: { conta: Conta }) {
 
 // ---------- Preferências ----------
 
-export function Preferencias({ conta, operadoras }: { conta: Conta; operadoras: Operadora[] }) {
+export function Preferencias({
+  conta,
+  operadoras,
+  habilitadas,
+  fonte,
+  errosTabelas,
+}: {
+  conta: Conta;
+  operadoras: Operadora[];
+  /** Habilitadas de fato (a lista da conta ou o padrão: operadoras-alvo no catálogo ANS, todas no fictício). */
+  habilitadas: string[];
+  fonte: "ans" | "ficticio";
+  errosTabelas: { arquivo: string; linha: number; motivo: string }[];
+}) {
   const todas = operadoras.map((o) => o.id);
-  const [sel, setSel] = useState<string[]>(conta.operadorasHabilitadas.length ? conta.operadorasHabilitadas : todas);
+  const [sel, setSel] = useState<string[]>(habilitadas);
   const [maisInfo, setMaisInfo] = useState(conta.maisInfoRelevantes);
   const [editando, setEditando] = useState(false);
+  const [busca, setBusca] = useState("");
   const [pending, start] = useTransition();
   const toast = useToast();
+  // No fictício, lista vazia = todas. No catálogo ANS, vazia = operadoras-alvo; por isso salva a lista explícita.
   const salvar = (ops: string[], mi: boolean) =>
     start(async () => {
-      await updatePreferencias(ops.length === todas.length ? [] : ops, mi);
+      await updatePreferencias(fonte === "ficticio" && ops.length === todas.length ? [] : ops, mi);
       toast("Ação concluída com sucesso.");
     });
+  const habilitadasOps = operadoras.filter((o) => sel.includes(o.id));
+  const q = busca.trim().toLowerCase();
+  const listaModal = q
+    ? operadoras.filter((o) => o.nome.toLowerCase().includes(q) || o.registroAns.includes(q))
+    : operadoras;
   return (
     <div className="space-y-8">
       <h2 className="text-lg font-semibold">Preferências</h2>
+      {errosTabelas.length > 0 && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+          <div className="font-medium">
+            {errosTabelas.length} linha(s) de tabela de venda ignorada(s) em data/tabelas
+          </div>
+          <ul className="mt-1 max-h-40 list-disc overflow-auto pl-5 text-xs">
+            {errosTabelas.map((e, i) => (
+              <li key={i}>
+                {e.arquivo}:{e.linha} {e.motivo}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <Secao titulo="Operadoras" descricao="Habilite as operadoras e seguradoras com as quais sua equipe trabalha.">
         <p className="text-sm text-muted-foreground">
           {sel.length === todas.length ? "Todas habilitadas" : `${sel.length} de ${todas.length} habilitadas`}
@@ -416,6 +452,20 @@ export function Preferencias({ conta, operadoras }: { conta: Conta; operadoras: 
         <Button variant="outline" onClick={() => setEditando(true)}>
           Alterar
         </Button>
+      </Secao>
+      <Secao
+        titulo="Ajuste de preço por operadora (%)"
+        descricao="Aplicado sobre o valor de referência da ANS (VCM). Planos com tabela de venda não mudam."
+      >
+        {fonte === "ans" ? (
+          <ul className="max-w-md divide-y rounded border">
+            {habilitadasOps.map((o) => (
+              <AjusteOperadora key={o.id} op={o} valor={conta.ajustes?.[o.id] ?? 0} />
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">Disponível quando a base da ANS estiver importada.</p>
+        )}
       </Secao>
       <Secao titulo="Mais informações">
         <label className="flex items-center gap-2 text-sm">
@@ -431,15 +481,20 @@ export function Preferencias({ conta, operadoras }: { conta: Conta; operadoras: 
         </label>
       </Secao>
       <Modal open={editando} onClose={() => setEditando(false)} title="Operadoras habilitadas">
+        {operadoras.length > 12 && (
+          <Input placeholder="Procurar operadora..." value={busca} onChange={(e) => setBusca(e.target.value)} />
+        )}
         <div className="max-h-80 space-y-1 overflow-auto">
-          {operadoras.map((o) => (
+          {listaModal.map((o) => (
             <label key={o.id} className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={sel.includes(o.id)}
                 onChange={() => setSel((s) => (s.includes(o.id) ? s.filter((x) => x !== o.id) : [...s, o.id]))}
               />
+              <OperadoraIcone op={o} tamanho={20} />
               {o.nome}
+              <span className="text-xs text-muted-foreground">{o.registroAns}</span>
             </label>
           ))}
         </div>
@@ -454,5 +509,43 @@ export function Preferencias({ conta, operadoras }: { conta: Conta; operadoras: 
         </Button>
       </Modal>
     </div>
+  );
+}
+
+function AjusteOperadora({ op, valor }: { op: Operadora; valor: number }) {
+  const [v, setV] = useState(String(valor));
+  const salvo = useRef(valor);
+  const [pending, start] = useTransition();
+  const toast = useToast();
+  const salvar = () => {
+    const n = Number(v.replace(",", "."));
+    if (v.trim() === "" || n === salvo.current) return setV(String(salvo.current));
+    start(async () => {
+      const r = await aplicarAjuste(op.id, n);
+      if (!r.success) {
+        setV(String(salvo.current));
+        return toast(r.error, true);
+      }
+      salvo.current = n;
+      toast("Ajuste salvo.");
+    });
+  };
+  return (
+    <li className="flex items-center gap-3 px-3 py-2 text-sm">
+      <OperadoraIcone op={op} tamanho={24} />
+      <span className="flex-1 truncate">{op.nome}</span>
+      <Input
+        type="number"
+        step="0.1"
+        aria-label={`Ajuste de ${op.nome} (%)`}
+        className="h-8 w-24 text-right"
+        value={v}
+        disabled={pending}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={salvar}
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      />
+      <span className="text-muted-foreground">%</span>
+    </li>
   );
 }

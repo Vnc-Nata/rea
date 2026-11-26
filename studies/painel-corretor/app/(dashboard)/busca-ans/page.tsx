@@ -1,7 +1,7 @@
 import { AnsHeader, BuscaAnsLista } from "@/components/busca-ans";
 import { BuscaAnsRealLista } from "@/components/busca-ans-real";
 import { lerBaseAns } from "@/lib/ans";
-import { readDb } from "@/lib/db";
+import { catalogo } from "@/lib/catalogo";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +14,12 @@ export default async function BuscaAns({
   // Com a base oficial importada (npm run importar-ans), a busca usa dados reais da ANS.
   const base = lerBaseAns();
   if (base) return <BuscaAnsRealLista base={base} sp={sp} />;
-  const { operadoras, planos } = readDb();
+  // Sem base: catálogo fictício (pequeno), filtrado no navegador.
+  const { operadoras, planos, cidades } = catalogo();
   return (
     <>
       <AnsHeader />
-      <BuscaAnsLista operadoras={operadoras} planos={planos} />
+      <BuscaAnsLista operadoras={operadoras} planos={planos} cidades={cidades} />
     </>
   );
 }

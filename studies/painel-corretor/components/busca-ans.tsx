@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useState } from "react";
 import type { Hospital, Modalidade, Operadora, Plano } from "@/lib/types";
 import { FAIXAS, faixaLabel } from "@/lib/types";
-import { CIDADES } from "@/lib/seed";
 import { cn, moeda } from "@/lib/utils";
 import { Input, Panel, Select, ToggleGroup } from "./ui";
 
@@ -21,7 +20,15 @@ export function AnsHeader() {
   );
 }
 
-export function BuscaAnsLista({ operadoras, planos }: { operadoras: Operadora[]; planos: Plano[] }) {
+export function BuscaAnsLista({
+  operadoras,
+  planos,
+  cidades,
+}: {
+  operadoras: Operadora[];
+  planos: Plano[];
+  cidades: string[];
+}) {
   const [q, setQ] = useState("");
   const [modalidade, setModalidade] = useState<Modalidade>("PME");
   const [cidade, setCidade] = useState("São Paulo - SP");
@@ -49,7 +56,7 @@ export function BuscaAnsLista({ operadoras, planos }: { operadoras: Operadora[];
         </div>
         <ToggleGroup options={["PF", "PME", "Adesão"] as const} value={modalidade} onChange={setModalidade} />
         <Select value={cidade} onChange={(e) => setCidade(e.target.value)}>
-          {CIDADES.map((c) => (
+          {cidades.map((c) => (
             <option key={c}>{c}</option>
           ))}
         </Select>

@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { CotacaoEditor } from "@/components/cotacao-editor";
-import { lerConta } from "@/lib/conta-db";
+import { catalogo } from "@/lib/catalogo";
 import { readDb } from "@/lib/db";
+import { cidadeValida } from "@/lib/selecao";
+import type { Plano } from "@/lib/types";
 
 export default async function EditCotacao({
   params,
@@ -15,15 +17,26 @@ export default async function EditCotacao({
   const db = readDb();
   const cotacao = db.cotacoes.find((c) => c.id === id);
   if (!cotacao) notFound();
+  // Só os planos dos cenários vão para o navegador; o seletor busca o resto pela server action.
+  const cat = catalogo();
+  const porId = new Map(cat.planos.map((p) => [p.id, p]));
+  const planos: Plano[] = cotacao.cenarios.flatMap((c) => {
+    const p = porId.get(c.planoId);
+    return p ? [{ ...p, cidades: [] }] : [];
+  });
+  const opIds = new Set(planos.map((p) => p.operadoraId));
+  const hospIds = new Set(planos.flatMap((p) => p.rede.map((r) => r.hospitalId)));
+  const filtro = { ...cotacao.filtro, cidade: cidadeValida(cotacao.filtro.cidade, cat.cidades) };
   return (
     <CotacaoEditor
-      cotacao={cotacao}
-      planos={db.planos}
-      operadoras={db.operadoras}
-      hospitais={db.hospitais}
+      cotacao={{ ...cotacao, filtro }}
+      planos={planos}
+      operadoras={cat.operadoras.filter((o) => opIds.has(o.id))}
+      hospitais={cat.hospitais.filter((h) => hospIds.has(h.id))}
+      cidades={cat.cidades}
+      fonte={cat.fonte}
       mensagemPadrao={db.perfil.mensagemPadrao}
       drawer={d}
-      operadorasHabilitadas={lerConta(db).operadorasHabilitadas}
     />
   );
 }

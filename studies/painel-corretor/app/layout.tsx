@@ -4,8 +4,8 @@ import { ToastProvider } from "@/components/ui";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Painel Multicálculo (estudo)",
-  description: "Recriação local, para estudo, de um painel de multicálculo de planos de saúde. Dados fictícios.",
+  title: "Atan Prime · Cotações",
+  description: "Cotações de planos de saúde: comparação de planos e propostas para clientes.",
   robots: { index: false },
 };
 

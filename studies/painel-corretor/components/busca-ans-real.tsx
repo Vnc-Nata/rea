@@ -1,6 +1,7 @@
 import { ArrowLeft, Filter } from "lucide-react";
 import Link from "next/link";
-import { filtrarPlanos, opcoes, type BaseAns, type FiltroAns } from "@/lib/ans";
+import { filtrarPlanos, opcoes, type BaseAns, type FiltroAns, type IndicadoresAns, type RedeAns } from "@/lib/ans";
+import { rotuloMunicipio } from "@/lib/municipios";
 import { buttonClass } from "@/lib/button";
 import { cn, moeda } from "@/lib/utils";
 
@@ -157,9 +158,23 @@ export function BuscaAnsRealLista({ base, sp }: { base: BaseAns; sp: SP }) {
   );
 }
 
-const ABAS = ["Preços", "Abrangência", "Características"] as const;
+const ABAS = ["Preços", "Abrangência", "Rede Credenciada", "Características"] as const;
 
-export function BuscaAnsRealDetalhe({ base, registro, sp }: { base: BaseAns; registro: string; sp: SP }) {
+const pct = (v: number) => `${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 2 })}%`;
+
+export function BuscaAnsRealDetalhe({
+  base,
+  registro,
+  sp,
+  indicadores,
+  rede,
+}: {
+  base: BaseAns;
+  registro: string;
+  sp: SP;
+  indicadores: IndicadoresAns | null;
+  rede: RedeAns | null;
+}) {
   const op = base.operadoras.find((o) => o.registroAns === registro);
   if (!op) return null;
   const planos = filtrarPlanos(base, filtroDe(sp)).filter((p) => p.registroAns === registro);
@@ -167,6 +182,13 @@ export function BuscaAnsRealDetalhe({ base, registro, sp }: { base: BaseAns; reg
   const plano = todos.find((p) => p.id === sp.plano) ?? todos[0];
   const aba = ABAS.find((a) => a === sp.aba) ?? "Preços";
   const nome = op.nomeFantasia ?? op.razaoSocial;
+  const ind = indicadores?.porOperadora[registro];
+  const hospitaisPlano = plano
+    ? (rede?.porPlano[plano.id] ?? [])
+        .map((cnes) => ({ cnes, ...rede!.hospitais[cnes] }))
+        .filter((h) => h.nome)
+        .sort((a, b) => a.municipio.localeCompare(b.municipio, "pt-BR") || a.nome.localeCompare(b.nome, "pt-BR"))
+    : [];
   const { plano: _p, aba: _a, ...filtros } = sp;
   return (
     <>
@@ -195,9 +217,31 @@ export function BuscaAnsRealDetalhe({ base, registro, sp }: { base: BaseAns; reg
           <div className="space-y-2 rounded-sm bg-background p-4 text-sm shadow-sm">
             <div className="font-medium">Operadora</div>
             <p className="text-muted-foreground">{op.modalidade}</p>
-            <p className="text-xs text-muted-foreground">
-              IDSS e reajuste não estão na base importada. Consulte o portal da ANS para esses índices.
-            </p>
+            {ind?.idss != null || ind?.reajuste != null ? (
+              <dl className="grid grid-cols-2 gap-2">
+                <div>
+                  <dt className="text-xs text-muted-foreground">IDSS{ind.idssAno ? ` ${ind.idssAno}` : ""}</dt>
+                  <dd className="font-medium">
+                    {ind.idss != null ? ind.idss.toLocaleString("pt-BR", { minimumFractionDigits: 4 }) : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Reajuste{ind.ciclo ? ` ${ind.ciclo}` : ""}</dt>
+                  <dd className="font-medium">
+                    {ind.reajuste != null ? pct(ind.reajuste) : "—"}
+                    {ind.reajusteAnterior != null && (
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">
+                        (anterior {pct(ind.reajusteAnterior)})
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                IDSS e reajuste desta operadora não estão na base importada.
+              </p>
+            )}
           </div>
         </div>
         {plano && (
@@ -285,6 +329,36 @@ export function BuscaAnsRealDetalhe({ base, registro, sp }: { base: BaseAns; reg
                 )}
               </div>
             )}
+            {aba === "Rede Credenciada" &&
+              (hospitaisPlano.length ? (
+                <table className="mt-4 w-full text-sm">
+                  <thead>
+                    <tr className="text-muted-foreground">
+                      <th className="p-2 text-left font-medium">Hospital</th>
+                      <th className="p-2 text-left font-medium">Cidade</th>
+                      <th className="p-2 text-center font-medium">Pronto-socorro</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hospitaisPlano.map((h) => (
+                      <tr key={h.cnes} className="border-t">
+                        <td className="p-2">
+                          {h.nome}
+                          <div className="text-xs text-muted-foreground">CNES {h.cnes}</div>
+                        </td>
+                        <td className="p-2 text-muted-foreground">{rotuloMunicipio(h.municipio)}</td>
+                        <td className="p-2 text-center">{h.urgencia ? "Sim" : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  {rede
+                    ? "Sem hospitais da rede deste plano na base importada."
+                    : "A rede credenciada não foi importada."}
+                </p>
+              ))}
             {aba === "Características" && (
               <dl className="mt-4 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
                 {(
