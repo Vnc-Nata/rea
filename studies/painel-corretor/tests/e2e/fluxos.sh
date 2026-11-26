@@ -47,6 +47,8 @@ ab() { agent-browser --session "$SESSION" "$@"; }
 # pipe e a captura nunca recebe EOF (o script trava no primeiro comando).
 # Espera padrão (ms), uma só para a execução inteira: o agent-browser reabre o navegador (página em branco)
 # quando AGENT_BROWSER_DEFAULT_TIMEOUT muda entre dois comandos da mesma sessão.
+# Git Bash (Windows) troca argumentos que começam com "/" por caminhos do Windows (ex.: "/amil/i.test(...)").
+export MSYS_NO_PATHCONV=1
 ESPERA="${E2E_TIMEOUT:-60000}"
 export AGENT_BROWSER_DEFAULT_TIMEOUT="$ESPERA"
 capt() {
