@@ -18,9 +18,10 @@ interface Entrada {
   tamanho: number;
   metodo: number;
 }
+type Opcoes = { tentativas?: number; esperaMs?: number; ociosoMs?: number };
 interface ZipRemoto {
-  listarEntradasRemotas(url: string): Promise<Entrada[]>;
-  abrirEntradaRemota(url: string, e: Entrada, o?: { tentativas?: number; esperaMs?: number }): Promise<Readable>;
+  listarEntradasRemotas(url: string, o?: Opcoes): Promise<Entrada[]>;
+  abrirEntradaRemota(url: string, e: Entrada, o?: Opcoes): Promise<Readable>;
 }
 interface Rede {
   hospitais: Record<string, { nome: string; municipio: string; uf: string; classe: string; urgencia: boolean }>;
@@ -446,4 +447,127 @@ test("importar --sem-rede não grava rede.json", async () => {
   await importar({ fonte: d, ufs: ["SP"], alvo, saida, semRede: true });
   assert.equal(fs.existsSync(path.join(d, "saida", "rede.json")), false);
   assert.equal(fs.existsSync(path.join(d, "saida", "indicadores.json")), true);
+});
+
+/** Servidor com Range; `responder` pode tratar o pedido (devolve true) antes da resposta normal 206. */
+async function servidor(
+  buf: Buffer,
+  responder: (ini: number, n: number, res: http.ServerResponse) => boolean,
+): Promise<{ url: string; fechar: () => void }> {
+  const srv = http.createServer((req, res) => {
+    const m = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range ?? "")!;
+    const ini = Number(m[1]);
+    const fim = Math.min(Number(m[2]), buf.length - 1);
+    const n = fim - ini + 1;
+    if (responder(ini, n, res)) return;
+    res.writeHead(206, { "Content-Range": `bytes ${ini}-${fim}/${buf.length}`, "Content-Length": n });
+    res.end(buf.subarray(ini, fim + 1));
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  return {
+    url: `http://127.0.0.1:${(srv.address() as AddressInfo).port}/a.zip`,
+    fechar: () => {
+      srv.closeAllConnections();
+      srv.close();
+    },
+  };
+}
+const csvGrande = Array.from({ length: 4000 }, (_, i) => `${i};${(i * 7919) % 104729};linha ${i * 31}`).join("\n");
+const zipGrande = () => zip([{ nome: "a.csv", dados: Buffer.from(csvGrande), metodo: 8 }]);
+
+test("HTTP: 503 no pedido de tamanho e 429 no conteúdo são repetidos", async () => {
+  const { listarEntradasRemotas, abrirEntradaRemota } = await zr;
+  const buf = zipGrande();
+  const status: string[] = [];
+  let tamanhoFalhou = false;
+  let dadosFalhou = false;
+  const s = await servidor(buf, (ini, n, res) => {
+    if (ini === 0 && n === 1 && !tamanhoFalhou) {
+      tamanhoFalhou = true;
+      status.push("503");
+      res.writeHead(503).end();
+      return true;
+    }
+    if (ini > 0 && n > 1000 && !dadosFalhou) {
+      dadosFalhou = true;
+      status.push("429");
+      res.writeHead(429).end();
+      return true;
+    }
+    return false;
+  });
+  try {
+    const o = { esperaMs: 5 };
+    const [e] = await listarEntradasRemotas(s.url, o);
+    assert.equal(await texto(await abrirEntradaRemota(s.url, e, o)), csvGrande);
+    assert.deepEqual(status, ["503", "429"]);
+  } finally {
+    s.fechar();
+  }
+});
+
+test("HTTP: 416 e 200 não são repetidos", async () => {
+  const { listarEntradasRemotas, abrirEntradaRemota } = await zr;
+  const buf = zipGrande();
+  for (const codigo of [416, 200]) {
+    let pedidos = 0;
+    const s = await servidor(buf, (ini, n, res) => {
+      if (ini > 0 && n > 1000) {
+        pedidos++;
+        res.writeHead(codigo).end();
+        return true;
+      }
+      return false;
+    });
+    try {
+      const o = { esperaMs: 5 };
+      const [e] = await listarEntradasRemotas(s.url, o);
+      await assert.rejects(texto(await abrirEntradaRemota(s.url, e, o)), new RegExp(`HTTP ${codigo}`));
+      assert.equal(pedidos, 1);
+    } finally {
+      s.fechar();
+    }
+  }
+});
+
+test("HTTP: servidor que para de mandar dados é abortado e retomado", async () => {
+  const { listarEntradasRemotas, abrirEntradaRemota } = await zr;
+  const buf = zipGrande();
+  const inicios: number[] = [];
+  const s = await servidor(buf, (ini, n, res) => {
+    if (!(ini > 0 && n > 1000)) return false;
+    inicios.push(ini);
+    if (inicios.length > 1) return false;
+    // Primeiro pedido do conteúdo: manda um terço e fica parado, sem fechar.
+    res.writeHead(206, { "Content-Range": `bytes ${ini}-${ini + n - 1}/${buf.length}`, "Content-Length": n });
+    res.write(buf.subarray(ini, ini + Math.floor(n / 3)));
+    return true;
+  });
+  try {
+    const o = { esperaMs: 5, ociosoMs: 300 };
+    const [e] = await listarEntradasRemotas(s.url, o);
+    const t0 = Date.now();
+    assert.equal(await texto(await abrirEntradaRemota(s.url, e, o)), csvGrande);
+    assert.ok(Date.now() - t0 < 5000);
+    assert.equal(inicios.length, 2);
+    assert.ok(inicios[1] > inicios[0], inicios.join(","));
+  } finally {
+    s.fechar();
+  }
+});
+
+test("reajuste sem a coluna TP_AGRUPAMENTO: avisa uma vez e segue", async (t) => {
+  const { indicadores } = await imp;
+  const d = tmp();
+  fs.cpSync(PDA, d, { recursive: true });
+  fs.writeFileSync(
+    path.join(d, "percentuais_de_reajuste_de_agrupamento-055", "pda-055-Percentuais_de_Reajuste_de_Agrupamento.csv"),
+    "REGISTRO_OPERADORA;CICLO;PCT_UNICO;PCT_INT_COM_OBSTET\n326305;2026;13,5;\n326305;2025;;11,9\n",
+  );
+  const log = t.mock.method(console, "log", () => {});
+  const { porOperadora } = await indicadores(d, new Set(["326305"]));
+  const avisos = log.mock.calls.filter((c) => c.arguments.join(" ").includes("TP_AGRUPAMENTO"));
+  assert.equal(avisos.length, 1);
+  assert.equal(porOperadora["326305"].reajuste, 13.5);
+  assert.equal(porOperadora["326305"].reajusteAnterior, 11.9);
 });

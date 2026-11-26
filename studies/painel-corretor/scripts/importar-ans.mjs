@@ -437,6 +437,8 @@ export async function indicadores(fonte, registros) {
   for await (const { cab, linha } of csv(await abrir(fonte, ARQ.reajuste))) {
     if (!conferido) {
       exigir(cab, ["REGISTRO_OPERADORA", "CICLO", "PCT_UNICO", "PCT_INT_COM_OBSTET"], ARQ.reajuste);
+      if (!("TP_AGRUPAMENTO" in cab))
+        log(`Aviso: ${ARQ.reajuste} sem a coluna TP_AGRUPAMENTO; no mesmo ciclo vale a primeira linha com PCT_UNICO`);
       conferido = true;
     }
     const reg = registro(linha[cab.REGISTRO_OPERADORA]);

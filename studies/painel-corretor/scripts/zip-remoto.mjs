@@ -17,69 +17,113 @@ const MAX16 = 0xffff;
 
 const remoto = (fonte) => /^https?:/i.test(String(fonte));
 
-/** Tamanho total do arquivo (local: fs.stat; remoto: Content-Range de um pedido de 1 byte). */
-async function tamanho(fonte) {
-  if (!remoto(fonte)) return fs.statSync(fonte).size;
-  const r = await fetch(fonte, { headers: { Range: "bytes=0-0" } });
-  await r.body?.cancel();
-  if (r.status !== 206) throw new Error(`${fonte}: o servidor não aceitou Range (HTTP ${r.status})`);
-  const total = Number(/\/(\d+)\s*$/.exec(r.headers.get("content-range") ?? "")?.[1]);
-  if (!Number.isFinite(total)) throw new Error(`${fonte}: Content-Range sem tamanho total`);
-  return total;
-}
-
-const PADRAO = { tentativas: 5, esperaMs: 1000 };
+// tentativas: quedas seguidas antes de desistir; esperaMs: primeira espera (dobra a cada queda);
+// ociosoMs: sem receber nenhum byte por esse tempo, a conexão é abortada e retomada.
+const PADRAO = { tentativas: 5, esperaMs: 1000, ociosoMs: 60_000 };
 const PROGRESSO_MIN = 1 << 20; // 1 MB recebido desde a última queda zera as tentativas
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+const opcoesDe = (o) => ({ ...PADRAO, ...o });
 
-/** Erro que não adianta repetir (servidor sem Range, resposta incoerente). */
+/** Erro que não adianta repetir (servidor sem Range, resposta incoerente, 4xx). */
 class ErroFatal extends Error {}
 
+/** Vigia de ociosidade: aborta o pedido se `ms` passar sem chamar renovar(). */
+function vigia(ms) {
+  const ac = new AbortController();
+  let t;
+  const renovar = () => {
+    clearTimeout(t);
+    t = setTimeout(() => ac.abort(new Error(`sem dados por ${ms / 1000} s`)), ms);
+  };
+  renovar();
+  return { signal: ac.signal, renovar, parar: () => clearTimeout(t) };
+}
+
+/** Pedido Range que deve voltar 206; 5xx e 429 podem ser repetidos, o resto é fatal. */
+async function pedirRange(url, ini, fim, signal) {
+  const r = await fetch(url, { headers: { Range: `bytes=${ini}-${fim - 1}` }, signal });
+  if (r.status === 206) return r;
+  await r.body?.cancel();
+  if (r.status >= 500 || r.status === 429) throw new Error(`HTTP ${r.status}`);
+  throw new ErroFatal(`${url}: o servidor não aceitou Range (HTTP ${r.status})`);
+}
+
+/** Decide se repete depois de um erro; devolve o novo número de falhas ou lança o erro. */
+async function talvezRepetir(e, falhas, { tentativas, esperaMs }, url, pos) {
+  if (e instanceof ErroFatal || falhas + 1 > tentativas) throw e;
+  const ms = esperaMs * 2 ** falhas;
+  console.warn(`! ${url}: ${e.message}; tentando de novo em ${ms / 1000} s (retomando do byte ${pos})`);
+  await espera(ms);
+  return falhas + 1;
+}
+
+/** Tamanho total do arquivo (local: fs.stat; remoto: Content-Range de um pedido de 1 byte). */
+async function tamanho(fonte, opcoes) {
+  if (!remoto(fonte)) return fs.statSync(fonte).size;
+  const o = opcoesDe(opcoes);
+  for (let falhas = 0; ; ) {
+    const v = vigia(o.ociosoMs);
+    try {
+      const r = await pedirRange(fonte, 0, 1, v.signal);
+      await r.body?.cancel();
+      const total = Number(/\/(\d+)\s*$/.exec(r.headers.get("content-range") ?? "")?.[1]);
+      if (!Number.isFinite(total)) throw new ErroFatal(`${fonte}: Content-Range sem tamanho total`);
+      return total;
+    } catch (e) {
+      falhas = await talvezRepetir(e, falhas, o, fonte, 0);
+    } finally {
+      v.parar();
+    }
+  }
+}
+
 /**
- * Baixa [ini, fim) por Range. Se a conexão cair, tenta de novo (até `tentativas` quedas seguidas,
- * com espera crescente) retomando do último byte recebido; quem lê vê um fluxo contínuo.
+ * Baixa [ini, fim) por Range. Se a conexão cair, parar de mandar dados por `ociosoMs` ou o servidor
+ * responder 5xx/429, tenta de novo (até `tentativas` falhas seguidas, com espera crescente)
+ * retomando do último byte recebido; quem lê vê um fluxo contínuo.
  */
-async function* baixarComRetomada(url, ini, fim, { tentativas, esperaMs }) {
+async function* baixarComRetomada(url, ini, fim, o) {
   let pos = ini;
   let falhas = 0;
   let posFalha = ini;
   while (pos < fim) {
+    const v = vigia(o.ociosoMs);
     try {
-      const r = await fetch(url, { headers: { Range: `bytes=${pos}-${fim - 1}` } });
-      if (r.status !== 206) {
-        await r.body?.cancel();
-        throw new ErroFatal(`${url}: o servidor não aceitou Range (HTTP ${r.status})`);
-      }
+      const r = await pedirRange(url, pos, fim, v.signal);
       const ini2 = Number(/bytes\s+(\d+)-/.exec(r.headers.get("content-range") ?? "")?.[1]);
       if (ini2 !== pos) {
         await r.body?.cancel();
         throw new ErroFatal(`${url}: Content-Range inesperado (${r.headers.get("content-range")})`);
       }
+      v.renovar();
       for await (const c of r.body) {
+        v.renovar();
         let b = Buffer.from(c.buffer, c.byteOffset, c.byteLength);
         if (b.length > fim - pos) b = b.subarray(0, fim - pos);
         if (!b.length) continue;
         pos += b.length;
         // Só zera a contagem depois de avançar bastante (evita repetir para sempre de 10 em 10 bytes).
         if (pos - posFalha >= PROGRESSO_MIN) falhas = 0;
+        v.parar(); // o consumidor pode demorar para pedir o próximo pedaço: não conta como ociosidade
         yield b;
+        v.renovar();
       }
       if (pos < fim) throw new Error(`conexão encerrada em ${pos - ini} de ${fim - ini} bytes`);
     } catch (e) {
-      if (e instanceof ErroFatal || ++falhas > tentativas) throw e;
+      const erro = v.signal.aborted && v.signal.reason instanceof Error ? v.signal.reason : e;
+      falhas = await talvezRepetir(erro, falhas, o, url, pos);
       posFalha = pos;
-      const ms = esperaMs * 2 ** (falhas - 1);
-      console.warn(`! ${url}: ${e.message}; tentando de novo em ${ms / 1000} s (retomando do byte ${pos})`);
-      await espera(ms);
+    } finally {
+      v.parar();
     }
   }
 }
 
 /** Bytes [ini, fim) do arquivo, como stream. */
-async function intervaloStream(fonte, ini, fim, opcoes = PADRAO) {
+async function intervaloStream(fonte, ini, fim, opcoes) {
   if (fim <= ini) return Readable.from([]);
   if (!remoto(fonte)) return fs.createReadStream(fonte, { start: ini, end: fim - 1 });
-  return Readable.from(baixarComRetomada(fonte, ini, fim, { ...PADRAO, ...opcoes }), { objectMode: false });
+  return Readable.from(baixarComRetomada(fonte, ini, fim, opcoesDe(opcoes)), { objectMode: false });
 }
 
 /** Bytes [ini, fim) do arquivo, em memória (para trechos pequenos). */
@@ -115,7 +159,7 @@ const u64 = (buf, p) => {
  * @returns {Promise<{ nome: string, offset: number, tamanhoComprimido: number, tamanho: number, metodo: number }[]>}
  */
 export async function listarEntradasRemotas(url, opcoes) {
-  const total = await tamanho(url);
+  const total = await tamanho(url, opcoes);
   // EOCD (22 bytes) + comentário (até 65535) + localizador ZIP64 (20) antes dele.
   const iniCauda = Math.max(0, total - (22 + MAX16 + 20));
   const cauda = await intervalo(url, iniCauda, total, opcoes);
