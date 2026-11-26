@@ -4,9 +4,13 @@ Recriação local, para estudo, das telas e fluxos de um painel de multicálculo
 planos de saúde para corretores. O levantamento do app de referência está em
 [ANALISE.md](ANALISE.md).
 
-> **Não é o serviço original.** Marca, operadoras, planos, preços, hospitais e
-> índices são fictícios. Não há integração com nenhuma API real nem login.
-> Use apenas localmente; não publique como se fosse o produto de referência.
+> **Não é o serviço original.** A marca é própria ("Atan Prime · Cotações"). Planos, operadoras, rede
+> hospitalar e valores de referência vêm dos dados abertos da ANS (veja abaixo); sem a base importada o painel cai
+> nos dados fictícios de exemplo. Não há integração com o Painel do Corretor nem login. Use apenas localmente; não
+> publique como se fosse o produto de referência.
+
+**Uso no dia a dia (Windows):** dê duplo clique em `iniciar.bat`. Passo a passo para quem não é técnico em
+[docs/GUIA-RAPIDO.md](docs/GUIA-RAPIDO.md).
 
 ## Rodar
 
@@ -23,6 +27,22 @@ Para produção local: `npm run build && npm start`.
 Os dados ficam em `data/db.json`, criado na primeira requisição a partir de
 `lib/seed.ts`. Para voltar ao estado inicial: `npm run reset-db`.
 
+No Windows, `iniciar.bat` faz `git pull`, `npm install` (quando falta ou o `package-lock.json` mudou), liga o painel
+em outra janela e abre o navegador em http://localhost:3000.
+
+## Testes
+
+```bash
+npm test                                      # unidade (tsx --test)
+ANS_DIR=tests/fixtures npx next dev -p 3102   # painel com a base de teste
+BASE_URL=http://localhost:3102 npm run e2e    # navegador, via agent-browser
+```
+
+O e2e (`tests/e2e/fluxos.sh`) cobre nova cotação, distribuição, seletor (ícone, preço e "Referência ANS"),
+Compartilhar, Opções, proposta pública, Produtos, Busca ANS, Comparar e cotação legada ("Plano indisponível"). Cria
+cotações "E2E …" e as apaga no final pela interface. Precisa do agent-browser instalado
+(`npm i -g agent-browser && agent-browser install`; ou `AGENT_BROWSER_EXECUTABLE_PATH` apontando para um Chromium).
+
 ## O que funciona
 
 | Tela | Rota | Comportamento |
@@ -35,12 +55,13 @@ Os dados ficam em `data/db.json`, criado na primeira requisição a partir de
 | Busca ANS | `/busca-ans`, `/busca-ans/[registro]` | Com `data/ans/base.json` importado, usa os dados reais da ANS: filtros por nome/código, modalidade, UF, cidade, cobertura, acomodação e coparticipação; detalhe com VCM mínimo/mensalidade/máximo por faixa, abrangência e características. Sem a base, mostra os dados fictícios |
 | Produtos | `/produtos`, `/produtos/[operadoraId]` | Grade de operadoras filtrada (inclui Aceita MEI e contratação opcional/compulsória); tabelas de preço em acordeão, rede, imprimir |
 | Configurações | `/conta/*` | Perfil (foto, nome, telefone, mensagem padrão), Corretora (logo, cidade, redes sociais), Assinatura (licenças, faturas fictícias), Usuários (convite com limite de licenças, perfil, ativo/inativo), Equipes, Integrações (chave de API de estudo) e Preferências (operadoras habilitadas no seletor, "mais informações") |
+| Comparar | `/comparar` | Conferência com o Painel: casos (cidade, vidas, plano) com o "Valor no Painel" digitado, diferença % e ajuste sugerido por operadora, com "Aplicar ajuste" |
 | Tema | qualquer tela | Claro/escuro, salvo no navegador |
 
 | Base ANS | `/base-ans` | Planos ativos das operadoras escolhidas com o VCM por faixa etária da ANS, filtros (operadora, contratação, acomodação, coparticipação, UF, município) e estimativa pelo número de vidas em cada faixa |
 
-Contatos e Negócios (CRM, que no Painel é outro sistema com login próprio), notificações push,
-o assistente de IA (só o botão) e o login são apenas indicados, não recriados. Fotos e logos
+Contatos e Negócios (CRM, que no Painel é outro sistema com login próprio; aqui não há CRM), notificações
+push, o assistente de IA (só o botão, sem modelo ligado) e o login são apenas indicados, não recriados. Fotos e logos
 são só pré-visualizadas no navegador, sem gravar.
 
 ## Base ANS (dados reais e públicos)
@@ -84,6 +105,20 @@ Os logos vêm de [`data/ans/logos.json`](data/ans/logos.json) (registro ANS → 
 > **VCM não é preço de venda.** É o valor comercial que a operadora declarou à
 > ANS na nota técnica do plano, com faixa permitida de mínimo e máximo. Serve
 > para estimar e conferir; a cotação final usa a tabela de venda da operadora.
+
+## De onde vêm os dados do painel
+
+| Dado | Fonte | Observação |
+| --- | --- | --- |
+| Operadoras, planos, abrangência, acomodação, coparticipação | Dados abertos da ANS (importador) | Só planos ativos; a ANS não publica tipo de contratação (opcional/compulsória) nem aceitação de MEI |
+| Preço por faixa | Tabela de venda em `data/tabelas/*.csv` ([formato](data/tabelas/README.md)); sem ela, VCM da nota técnica | Cada preço mostra a origem ("Tabela de venda" ou "Referência ANS"); a tabela de venda vence a referência |
+| Ajuste de preço | Preferências ou tela Comparar | Percentual por operadora, só sobre a referência ANS |
+| Rede hospitalar | Produtos e prestadores hospitalares (ANS), UFs de `--uf` | CNES, município, classe, urgência |
+| IDSS e reajuste | Histórico IDSS e reajuste de agrupamento (ANS) | Valores mais recentes publicados |
+| Logos | `npm run baixar-logos` (ícones dos sites oficiais) | Fora do Git; sem logo, selo com a sigla |
+
+Limites: o VCM é uma **referência** e pode diferir do preço que o corretor vê no Painel (use **Comparar** para medir a
+diferença e ajustar por operadora); não há CRM, e a IA é só um botão.
 
 ## Estrutura
 

@@ -819,6 +819,7 @@ function SeletorPlanos({
                             type="checkbox"
                             disabled={ja}
                             checked={sel || ja}
+                            data-plano={p.id}
                             onChange={() => setSelecionados((s) => (sel ? s.filter((x) => x !== p.id) : [...s, p.id]))}
                             className="size-4 accent-[hsl(var(--primary))]"
                           />

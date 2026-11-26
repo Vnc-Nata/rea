@@ -108,3 +108,19 @@ rea recover-javascript-sources ... # exige REA_WAKARU_COMMAND (ver docs/guides/j
 
 Os argumentos exatos de cada comando estão em `rea <comando> --help` e nos guias
 de `docs/guides/web/`.
+
+## Do app de referência ao catálogo real (26/11/2026)
+
+A análise acima descreve o app de referência. O clone local deixou de usar dados fictícios onde há fonte pública:
+
+- **Catálogo**: dados abertos da ANS (`npm run importar-ans`), com planos ativos, VCM por faixa, área de
+  comercialização, rede hospitalar, IDSS e reajuste de agrupamento. O seletor de planos busca no servidor
+  (`buscarPlanos`) e mostra a origem de cada preço.
+- **Preço de venda**: tabelas CSV em `data/tabelas` (colunas e exemplo em `data/tabelas/README.md`) vencem o VCM.
+- **Validação contra o Painel**: a tela Comparar guarda casos com o "Valor no Painel" digitado, calcula a diferença
+  e sugere um ajuste percentual por operadora (Preferências).
+- **Limites conhecidos**: o VCM é referência e não o preço de venda; a ANS não publica tipo de contratação nem MEI,
+  então esses filtros só existem nos dados fictícios; não há CRM (Contatos e Negócios do app de referência são outro
+  sistema); o assistente de IA é só um botão; cotações antigas com planos que saíram do catálogo mostram "Plano
+  indisponível".
+- **Entrega**: `iniciar.bat` (Windows), [docs/GUIA-RAPIDO.md](docs/GUIA-RAPIDO.md) e `npm run e2e` (agent-browser).
