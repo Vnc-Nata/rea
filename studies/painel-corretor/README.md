@@ -46,22 +46,27 @@ são só pré-visualizadas no navegador, sem gravar.
 ## Base ANS (dados reais e públicos)
 
 A tela **Base ANS** usa os [dados abertos da ANS](https://dadosabertos.ans.gov.br/FTP/PDA/),
-importados por `scripts/importar-ans.mjs` para as operadoras listadas em
-[`data/ans/operadoras-alvo.json`](data/ans/operadoras-alvo.json) (hoje Amil,
-Bradesco Saúde, SulAmérica, Porto Saúde, Alice e Hapvida NotreDame, por
-registro ANS). Para incluir outra operadora, acrescente o registro ANS dela nesse
-arquivo.
+importados por `scripts/importar-ans.mjs`. Sem opções extras, importa as operadoras listadas em
+[`data/ans/operadoras-alvo.json`](data/ans/operadoras-alvo.json) (hoje Amil, Bradesco Saúde,
+SulAmérica, Porto Saúde, Alice e Hapvida NotreDame, por registro ANS); para incluir outra,
+acrescente o registro ANS dela nesse arquivo. Com `--todas`, importa todas as operadoras ativas
+que têm plano ativo vendido nas UFs de `--uf` (além das alvo).
 
 ```bash
-npm run importar-ans -- --uf SP          # municípios de SP; demais UFs só como sigla
-npm run importar-ans -- --uf SP,RJ,MG
-npm run importar-ans -- --sem-area       # mais rápido: pula a área de comercialização
+npm run importar-ans -- --uf SP,MG --todas   # recomendado: todas as operadoras de SP e MG
+npm run importar-ans -- --uf SP,MG           # só as operadoras alvo
+npm run importar-ans -- --uf SP --sem-rede   # pula a rede hospitalar
+npm run importar-ans -- --sem-area           # mais rápido: pula a área de comercialização (sem --todas)
+npm run importar-ans -- --fonte C:\pasta\pda # usa cópias locais, na mesma estrutura de pastas da PDA
+npm run baixar-logos                         # ícones dos sites oficiais em public/logos/<registro>.png
 ```
 
-A importação baixa cerca de 1,2 GB (a área de comercialização sozinha tem ~1 GB)
-e grava `data/ans/base.json`, que não vai para o Git. Rode de novo quando quiser
-atualizar; a ANS publica a base de produtos diariamente e o VCM a cada nova nota
-técnica.
+A importação baixa cerca de 1,2 GB (a área de comercialização sozinha tem ~1 GB), mais a parte da
+rede hospitalar das UFs pedidas: o zip da rede tem 2,3 GB, mas o importador lê só o índice dele e
+baixa apenas os CSVs das UFs de `--uf` (requisições HTTP Range). Grava em `data/ans/` os arquivos
+`base.json`, `rede.json` e `indicadores.json`, que não vão para o Git. Rode de novo quando quiser
+atualizar; a ANS publica a base de produtos diariamente e o VCM a cada nova nota técnica.
+`--todas` sem `--uf` traz todas as operadoras do país (base muito grande) e não lê a rede.
 
 | Arquivo da ANS | O que vira |
 | --- | --- |
@@ -69,6 +74,12 @@ técnica.
 | `caracteristicas_produtos_saude_suplementar-008/…csv` | Planos com situação "Ativo": contratação, segmentação, abrangência, acomodação, coparticipação |
 | `nota_tecnica_ntrp_vcm_faixa_etaria/…zip` | VCM, mínimo e máximo nas 10 faixas, da nota técnica mais recente de cada plano |
 | `area_comercializacao_planos_ntrp/…csv` | UFs onde cada plano é vendido e, nas UFs pedidas com `--uf`, os municípios |
+| `produtos_e_prestadores_hospitalares/…zip` | `rede.json`: hospitais (CNES, nome, município, classe, urgência) com vínculo ativo, por plano, nas UFs de `--uf` |
+| `historico_idss-020/…csv` | `indicadores.json`: IDSS mais recente publicado de cada operadora |
+| `percentuais_de_reajuste_de_agrupamento-055/…csv` | `indicadores.json`: reajuste do agrupamento de contratos nos dois ciclos mais recentes |
+
+Os logos vêm de [`data/ans/logos.json`](data/ans/logos.json) (registro ANS → domínio oficial):
+`npm run baixar-logos` baixa o ícone de cada domínio. São marcas de terceiros e ficam fora do Git.
 
 > **VCM não é preço de venda.** É o valor comercial que a operadora declarou à
 > ANS na nota técnica do plano, com faixa permitida de mínimo e máximo. Serve

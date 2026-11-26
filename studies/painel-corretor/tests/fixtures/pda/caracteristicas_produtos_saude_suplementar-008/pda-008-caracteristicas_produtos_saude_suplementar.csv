@@ -1,0 +1,9 @@
+ID_PLANO;CD_PLANO;NM_PLANO;REGISTRO_OPERADORA;SITUACAO_PLANO;CONTRATACAO;SGMT_ASSISTENCIAL;GR_SGMT_ASSISTENCIAL;LG_ODONTOLOGICO;OBSTETRICIA;ABRANGENCIA_COBERTURA;FATOR_MODERADOR;ACOMODACAO_HOSPITALAR;LIVRE_ESCOLHA;DT_REGISTRO_PLANO
+1001;400000001;AMIL SP;326305;Ativo;Coletivo empresarial;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Grupo de municípios;Ausente;Coletiva;Ausente;2020-01-01
+1002;400000002;AMIL RJ;326305;Ativo;Individual ou familiar;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Municipal;Ausente;Individual;Ausente;2020-01-01
+2001;400000003;SUL RS;111111;Ativo;Coletivo empresarial;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Municipal;Ausente;Coletiva;Ausente;2020-01-01
+3001;400000004;PAULISTA SP;222222;Ativo;Coletivo empresarial;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Municipal;Coparticipação;Coletiva;Ausente;2020-01-01
+3002;400000005;PAULISTA RJ;222222;Ativo;Coletivo empresarial;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Municipal;Ausente;Coletiva;Ausente;2020-01-01
+4001;400000006;NACIONAL;333333;Ativo;Coletivo empresarial;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Nacional;Ausente;Individual;Presente;2020-01-01
+5001;400000007;ESTADUAL SP;444444;Ativo;Coletivo por adesão;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Estadual;Ausente;Coletiva;Ausente;2020-01-01
+6001;400000008;INATIVO SP;555555;Cancelado;Coletivo empresarial;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Municipal;Ausente;Coletiva;Ausente;2010-01-01

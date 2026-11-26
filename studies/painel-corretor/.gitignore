@@ -3,3 +3,6 @@ node_modules
 next-env.d.ts
 data/db.json
 data/ans/base.json
+public/logos/
+data/ans/rede.json
+data/ans/indicadores.json
