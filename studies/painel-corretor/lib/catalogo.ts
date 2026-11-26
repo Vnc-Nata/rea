@@ -320,6 +320,10 @@ const estado = (G.__catalogoAns ??= {
   proximaVersao: 1,
   indices: new WeakMap(),
 });
+// Um cache criado por uma versão anterior deste módulo (recarga do servidor de desenvolvimento) pode não ter os campos novos.
+estado.versoesTabelas ??= new WeakMap();
+estado.proximaVersao ??= 1;
+estado.indices ??= new WeakMap();
 
 const DIR_LOGOS = () => path.join(process.cwd(), "public", "logos");
 
