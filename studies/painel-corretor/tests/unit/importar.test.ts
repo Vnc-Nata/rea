@@ -20,7 +20,7 @@ interface Entrada {
 }
 interface ZipRemoto {
   listarEntradasRemotas(url: string): Promise<Entrada[]>;
-  abrirEntradaRemota(url: string, e: Entrada): Promise<Readable>;
+  abrirEntradaRemota(url: string, e: Entrada, o?: { tentativas?: number; esperaMs?: number }): Promise<Readable>;
 }
 interface Rede {
   hospitais: Record<string, { nome: string; municipio: string; uf: string; classe: string; urgencia: boolean }>;
@@ -34,6 +34,8 @@ interface Importador {
   importar(o: Record<string, unknown>): Promise<BaseAns>;
   rede(fonte: string, planos: Record<string, unknown>, ufs: string[]): Promise<Rede>;
   indicadores(fonte: string, registros: Set<string>): Promise<{ porOperadora: Ind }>;
+  campos(linha: string): string[];
+  campoN(linha: string, idx: number): string | undefined;
 }
 const carregar = <T>(rel: string): Promise<T> => {
   const url = pathToFileURL(path.join(process.cwd(), rel)).href;
@@ -311,7 +313,8 @@ test("indicadores: IDSS mais recente não-ND e reajuste dos 2 ciclos mais recent
   });
   assert.deepEqual(porOperadora["222222"], { reajuste: 7, ciclo: 2025 });
   assert.deepEqual(porOperadora["333333"], { idss: 0.8543, idssAno: 2025 });
-  assert.equal(porOperadora["444444"], undefined);
+  // Várias linhas no mesmo ciclo: vale "Único" com PCT_UNICO; CICLO lido pelo primeiro ano de 4 dígitos.
+  assert.deepEqual(porOperadora["444444"], { reajuste: 8, ciclo: 2026, reajusteAnterior: 4 });
   assert.equal(porOperadora["111111"], undefined);
 });
 
@@ -351,7 +354,89 @@ test("importar --todas --uf SP: operadoras com plano ativo na UF (área, Naciona
   const rede = JSON.parse(fs.readFileSync(path.join(d, "saida", "rede.json"), "utf8"));
   assert.deepEqual(rede.porPlano["3001"], ["2078015", "2077485"]);
   const ind = JSON.parse(fs.readFileSync(path.join(d, "saida", "indicadores.json"), "utf8"));
-  assert.deepEqual(Object.keys(ind.porOperadora).sort(), ["222222", "326305", "333333"]);
+  assert.deepEqual(Object.keys(ind.porOperadora).sort(), ["222222", "326305", "333333", "444444"]);
+  // Municípios iguais são o mesmo objeto (sem cópias por plano).
+  const sp = (id: string) => base.planos.find((p) => p.id === id)!.municipios.find((m) => m.codigo === "355030");
+  assert.ok(sp("1001") && sp("1001") === sp("3001"));
+});
+
+test("--todas: plano Nacional com área só em outras UFs fica fora", async () => {
+  const { importar } = await imp;
+  const { d, alvo } = fonteCompleta();
+  const base = await importar({ fonte: d, ufs: ["SP"], alvo, saida: path.join(d, "s", "base.json"), todas: true });
+  assert.ok(!base.planos.some((p) => p.id === "7001"));
+  assert.ok(!base.operadoras.some((o) => o.registroAns === "666666"));
+  const rs = await importar({ fonte: d, ufs: ["RS"], alvo, saida: path.join(d, "r", "base.json"), todas: true });
+  assert.ok(rs.planos.some((p) => p.id === "7001"));
+});
+
+test("campoN devolve o mesmo campo que campos, com aspas e ; dentro de aspas", async () => {
+  const { campos, campoN } = await imp;
+  const linhas = ['"1";"a;b";"x ""y"" z";" 1001 ";"";fim', "1;2;3", '"só um"', ';;"";"\t9"'];
+  for (const l of linhas) {
+    const todos = campos(l);
+    for (let i = 0; i < todos.length; i++) assert.equal(campoN(l, i), todos[i], `${l} [${i}]`);
+    assert.equal(campoN(l, todos.length), undefined);
+  }
+});
+
+test("HTTP: conexão que cai no meio é retomada do último byte, sem corromper o inflate", async () => {
+  const { listarEntradasRemotas, abrirEntradaRemota } = await zr;
+  const grande = Array.from({ length: 4000 }, (_, i) => `${i};${(i * 7919) % 104729};linha ${i * 31}`).join("\n");
+  const buf = zip([{ nome: "produtos_prestadores_hospitalares_SP.csv", dados: Buffer.from(grande), metodo: 8 }]);
+  const inicios: number[] = [];
+  let quedas = 0;
+  const srv = http.createServer((req, res) => {
+    const m = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range ?? "")!;
+    const ini = Number(m[1]);
+    const fim = Math.min(Number(m[2]), buf.length - 1);
+    const n = fim - ini + 1;
+    res.writeHead(206, { "Content-Range": `bytes ${ini}-${fim}/${buf.length}`, "Content-Length": n });
+    const dados = ini > 0 && n > 1000; // pedido do conteúdo da entrada (a leitura do fim começa em 0)
+    if (dados) inicios.push(ini);
+    // Os dois primeiros pedidos do conteúdo caem no meio do corpo.
+    if (dados && quedas < 2) {
+      quedas++;
+      res.write(buf.subarray(ini, ini + Math.floor(n / 3)), () => setTimeout(() => res.socket?.destroy(), 20));
+      return;
+    }
+    res.end(buf.subarray(ini, fim + 1));
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  try {
+    const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/rede.zip`;
+    const [e] = await listarEntradasRemotas(url);
+    assert.ok(e.tamanhoComprimido > 3000, `comprimido ${e.tamanhoComprimido}`);
+    assert.equal(await texto(await abrirEntradaRemota(url, e, { esperaMs: 5 })), grande);
+    assert.equal(inicios.length, 3);
+    assert.ok(inicios[0] < inicios[1] && inicios[1] < inicios[2], inicios.join(","));
+  } finally {
+    srv.close();
+  }
+});
+
+test("HTTP: desiste depois de esgotar as tentativas", async () => {
+  const { listarEntradasRemotas, abrirEntradaRemota } = await zr;
+  const grande = Array.from({ length: 4000 }, (_, i) => `${i};${(i * 7919) % 104729}`).join("\n");
+  const buf = zip([{ nome: "a.csv", dados: Buffer.from(grande), metodo: 8 }]);
+  const srv = http.createServer((req, res) => {
+    const m = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range ?? "")!;
+    const ini = Number(m[1]);
+    const fim = Math.min(Number(m[2]), buf.length - 1);
+    const n = fim - ini + 1;
+    res.writeHead(206, { "Content-Range": `bytes ${ini}-${fim}/${buf.length}`, "Content-Length": n });
+    if (ini > 0 && n > 1000)
+      return void res.write(buf.subarray(ini, ini + 10), () => setTimeout(() => res.socket?.destroy(), 20));
+    res.end(buf.subarray(ini, fim + 1));
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  try {
+    const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/a.zip`;
+    const [e] = await listarEntradasRemotas(url);
+    await assert.rejects(texto(await abrirEntradaRemota(url, e, { tentativas: 2, esperaMs: 1 })));
+  } finally {
+    srv.close();
+  }
 });
 
 test("importar --sem-rede não grava rede.json", async () => {

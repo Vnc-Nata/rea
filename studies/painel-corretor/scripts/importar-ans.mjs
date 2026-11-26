@@ -104,6 +104,26 @@ export function campos(linha) {
   return out;
 }
 
+/** Só o campo `idx` de uma linha CSV (mesmo resultado de campos(linha)[idx]), sem dividir o resto. */
+export function campoN(linha, idx) {
+  let cur = "";
+  let q = false;
+  let n = 0;
+  for (let i = 0; i < linha.length; i++) {
+    const c = linha[i];
+    if (c === '"') {
+      if (q && linha[i + 1] === '"') {
+        if (n === idx) cur += '"';
+        i++;
+      } else q = !q;
+    } else if (c === ";" && !q) {
+      if (n === idx) return cur.trim();
+      n++;
+    } else if (n === idx) cur += c;
+  }
+  return n === idx ? cur.trim() : undefined;
+}
+
 const numero = (s) => {
   if (!s) return null;
   const t = s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : s;
@@ -137,8 +157,11 @@ async function baixar(fonte, rel) {
   return Buffer.concat(chunks);
 }
 
-/** Lê um stream de texto linha a linha, devolvendo { cab, linha } já divididos. */
-async function* csv(stream) {
+/**
+ * Lê um stream de texto linha a linha, devolvendo { cab, linha } já divididos.
+ * `filtro(texto, cab)`, se dado, descarta a linha antes de dividi-la (mais rápido em arquivos enormes).
+ */
+async function* csv(stream, filtro) {
   let resto = "";
   let cab = null;
   const dec = new TextDecoder("utf-8");
@@ -152,10 +175,11 @@ async function* csv(stream) {
         cab = Object.fromEntries(campos(l.replace(/^﻿/, "")).map((h, i) => [h, i]));
         continue;
       }
-      yield { cab, linha: campos(l) };
+      if (!filtro || filtro(l, cab)) yield { cab, linha: campos(l) };
     }
   }
-  if (resto.trim() && cab) yield { cab, linha: campos(resto.replace(/\r$/, "")) };
+  const l = resto.replace(/\r$/, "");
+  if (l.trim() && cab && (!filtro || filtro(l, cab))) yield { cab, linha: campos(l) };
 }
 
 /** Lista as entradas de um .zip (diretório central) e devolve streams descompactados. */
@@ -268,20 +292,36 @@ async function vcm(fonte, planos) {
   return Object.keys(melhor).length;
 }
 
+/**
+ * UFs de cada plano e, nas UFs pedidas, os municípios. Linhas de planos não importados são
+ * descartadas antes de dividir; textos repetidos (UF, município) são compartilhados, não copiados.
+ * Só planos vendidos numa UF pedida recebem municípios, e esses ficam todos no filtro de --todas.
+ */
 async function area(fonte, planos, ufs) {
   const filtroUf = new Set(ufs);
+  const siglas = new Map(); // UF → mesma string
+  const municipios = new Map(); // "codigo|nome" → mesmo objeto { codigo, nome }
   const u = {};
   const mun = {};
-  for await (const { cab, linha } of csv(await abrir(fonte, ARQ.area))) {
+  const filtro = (l, cab) => planos[campoN(l, cab.ID_PLANO)] !== undefined;
+  for await (const { cab, linha } of csv(await abrir(fonte, ARQ.area), filtro)) {
     const id = linha[cab.ID_PLANO];
-    if (!planos[id]) continue;
-    const uf = linha[cab.SG_UF];
-    (u[id] ??= new Set()).add(uf);
-    if (filtroUf.has(uf)) (mun[id] ??= new Map()).set(linha[cab.CD_MUNICIPIO], `${linha[cab.NM_MUNICIPIO_X]}/${uf}`);
+    let uf = linha[cab.SG_UF];
+    if (siglas.has(uf)) uf = siglas.get(uf);
+    else siglas.set(uf, uf);
+    const lista = (u[id] ??= []);
+    if (!lista.includes(uf)) lista.push(uf);
+    if (!filtroUf.has(uf)) continue;
+    const codigo = linha[cab.CD_MUNICIPIO];
+    const nome = `${linha[cab.NM_MUNICIPIO_X]}/${uf}`;
+    const chave = `${codigo}|${nome}`;
+    let m = municipios.get(chave);
+    if (!m) municipios.set(chave, (m = { codigo, nome }));
+    (mun[id] ??= new Map()).set(codigo, m);
   }
   for (const id of Object.keys(u)) {
-    planos[id].ufs = [...u[id]].sort();
-    planos[id].municipios = mun[id] ? [...mun[id]].map(([codigo, nome]) => ({ codigo, nome })) : [];
+    planos[id].ufs = u[id].sort();
+    planos[id].municipios = mun[id] ? [...mun[id].values()] : [];
   }
   return Object.keys(u).length;
 }
@@ -293,16 +333,17 @@ function exigir(cab, nomes, arq) {
 }
 
 /**
- * Com --todas e --uf: fica só com planos vendidos nessas UFs (pela área de comercialização,
- * abrangência Nacional, ou Estadual sem área listada de operadora sediada nelas) e com as
+ * Com --todas e --uf: fica só com planos vendidos nessas UFs (pela área de comercialização; sem
+ * área listada, pela abrangência Nacional, ou Estadual de operadora sediada nelas) e com as
  * operadoras que têm pelo menos um. Planos e operadoras alvo ficam sempre.
  */
 function filtrarPorUf(ops, planos, ufs, alvo) {
   const set = new Set(ufs);
+  // Abrangência só conta quando o plano não tem área listada: se tem, a área manda.
   const cobre = (p) =>
-    p.ufs.some((u) => set.has(u)) ||
-    /nacional/i.test(p.abrangencia) ||
-    (/estadual/i.test(p.abrangencia) && !p.ufs.length && set.has(ops[p.registroAns]?.uf));
+    p.ufs.length
+      ? p.ufs.some((u) => set.has(u))
+      : /nacional/i.test(p.abrangencia) || (/estadual/i.test(p.abrangencia) && set.has(ops[p.registroAns]?.uf));
   const usadas = new Set(alvo.keys());
   for (const [id, p] of Object.entries(planos)) {
     if (alvo.has(p.registroAns) || cobre(p)) usadas.add(p.registroAns);
@@ -324,19 +365,26 @@ export async function rede(fonte, planos, ufs) {
   if (faltam.length) log(`Rede: UFs sem arquivo no zip: ${faltam.join(", ")}`);
 
   const hospitais = {};
+  const cnesUnico = new Map(); // CNES → mesma string (a chave de hospitais), para não repetir nos planos
   const sets = {};
   const COLS = ["ID_PLANO", "CD_CNES", "NM_ESTABELECIMENTO_SAUDE", "DE_CLAS_ESTB_SAUDE", "LG_URGENCIA_EMERGENCIA"];
   for (const e of entradas) {
     log(`Rede ${e.uf}: baixando ${(e.tamanhoComprimido / 1e6).toFixed(0)} MB compactados…`);
     let n = 0;
     let vinculos = 0;
-    for await (const { cab, linha } of csv(await abrirEntradaRemota(url, e))) {
+    // Dezenas de milhões de linhas: confere o ID_PLANO antes de dividir a linha inteira.
+    const filtro = (l, cab) => {
       if (++n === 1) exigir(cab, [...COLS, "NM_MUNICIPIO", "SG_UF", "DT_VINCULO_FIM"], e.nome);
       if (n % 1_000_000 === 0) log(`  ${e.uf}: ${mil(n)} linhas lidas, ${mil(vinculos)} vínculos`);
+      return planos[campoN(l, cab.ID_PLANO)] !== undefined;
+    };
+    for await (const { cab, linha } of csv(await abrirEntradaRemota(url, e), filtro)) {
       const id = linha[cab.ID_PLANO];
-      if (!planos[id] || linha[cab.DT_VINCULO_FIM]) continue;
-      const cnes = linha[cab.CD_CNES];
+      if (linha[cab.DT_VINCULO_FIM]) continue;
+      let cnes = linha[cab.CD_CNES];
       if (!cnes) continue;
+      if (cnesUnico.has(cnes)) cnes = cnesUnico.get(cnes);
+      else cnesUnico.set(cnes, cnes);
       const uf = linha[cab.SG_UF];
       hospitais[cnes] ??= {
         nome: linha[cab.NM_ESTABELECIMENTO_SAUDE],
@@ -384,7 +432,7 @@ export async function indicadores(fonte, registros) {
     }
   }
 
-  const ciclos = {}; // reg → Map(ciclo → %)
+  const ciclos = {}; // reg → Map(ciclo → { pct, prioridade })
   let conferido = false;
   for await (const { cab, linha } of csv(await abrir(fonte, ARQ.reajuste))) {
     if (!conferido) {
@@ -393,16 +441,22 @@ export async function indicadores(fonte, registros) {
     }
     const reg = registro(linha[cab.REGISTRO_OPERADORA]);
     if (!registros.has(reg)) continue;
-    const ciclo = Number(linha[cab.CICLO]);
-    const pct = numero(linha[cab.PCT_UNICO]) ?? numero(linha[cab.PCT_INT_COM_OBSTET]);
-    if (!Number.isInteger(ciclo) || pct === null) continue;
+    const ano = /\d{4}/.exec(linha[cab.CICLO] ?? "");
+    if (!ano) continue;
+    const ciclo = Number(ano[0]);
+    // Várias linhas no mesmo ciclo: vale a do agrupamento "Único" com PCT_UNICO, depois qualquer PCT_UNICO.
+    const unico = numero(linha[cab.PCT_UNICO]);
+    const pct = unico ?? numero(linha[cab.PCT_INT_COM_OBSTET]);
+    if (pct === null) continue;
+    const tipoUnico = /^[uú]nico$/i.test((linha[cab.TP_AGRUPAMENTO] ?? "").trim());
+    const prioridade = unico === null ? 0 : tipoUnico ? 2 : 1;
     const m = (ciclos[reg] ??= new Map());
-    if (!m.has(ciclo)) m.set(ciclo, pct);
+    if (!m.has(ciclo) || prioridade > m.get(ciclo).prioridade) m.set(ciclo, { pct, prioridade });
   }
   for (const [reg, m] of Object.entries(ciclos)) {
     const [atual, anterior] = [...m].sort((a, b) => b[0] - a[0]);
-    Object.assign(de(reg), { reajuste: atual[1], ciclo: atual[0] });
-    if (anterior) de(reg).reajusteAnterior = anterior[1];
+    Object.assign(de(reg), { reajuste: atual[1].pct, ciclo: atual[0] });
+    if (anterior) de(reg).reajusteAnterior = anterior[1].pct;
   }
   return { porOperadora };
 }

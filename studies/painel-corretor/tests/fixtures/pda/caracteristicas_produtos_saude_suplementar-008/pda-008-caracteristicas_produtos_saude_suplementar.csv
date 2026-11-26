@@ -7,3 +7,4 @@ ID_PLANO;CD_PLANO;NM_PLANO;REGISTRO_OPERADORA;SITUACAO_PLANO;CONTRATACAO;SGMT_AS
 4001;400000006;NACIONAL;333333;Ativo;Coletivo empresarial;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Nacional;Ausente;Individual;Presente;2020-01-01
 5001;400000007;ESTADUAL SP;444444;Ativo;Coletivo por adesão;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Estadual;Ausente;Coletiva;Ausente;2020-01-01
 6001;400000008;INATIVO SP;555555;Cancelado;Coletivo empresarial;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Municipal;Ausente;Coletiva;Ausente;2010-01-01
+7001;400000009;NACIONAL SO RS;666666;Ativo;Coletivo empresarial;Ambulatorial + Hospitalar com obstetrícia;Referência;0;Com obstetrícia;Nacional;Ausente;Coletiva;Ausente;2020-01-01
