@@ -75,6 +75,18 @@ export function linhaDoPlano(nome: string): string {
   return t[i].charAt(0).toUpperCase() + t[i].slice(1);
 }
 
+/**
+ * Tipo de coparticipação da Amil lido do nome: "Copart TP" = parcial, "Copart" sem TP = completa. Conferido no Painel
+ * do Corretor em 26/11/2026 (São Caetano do Sul, PME): o preço por vida das tabelas "Parcial" bate (±1%) com o VCM dos
+ * produtos "Copart TP", e o das tabelas "Completa" com o dos "Copart". Outras operadoras: desconhecido.
+ */
+export function tipoCopartDoNome(nome: string, grupo: string | undefined): "Parcial" | "Completa" | undefined {
+  if (grupo !== "Amil") return undefined;
+  const n = semAcento(nome);
+  if (!/(^|[^a-z])copart/.test(n)) return undefined;
+  return /(^|[^a-z0-9])tp([^a-z0-9]|$)/.test(n) ? "Parcial" : "Completa";
+}
+
 /** Percentual de coparticipação escrito no nome (ex.: "Copart 30%"), se houver. */
 export function percentualCopartDoNome(nome: string): number | undefined {
   const m = /(\d{1,2})\s*%/.exec(nome);

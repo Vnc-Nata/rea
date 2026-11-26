@@ -59,6 +59,7 @@ export interface Plano {
   coparticipacao: Coparticipacao;
   percentualCopart?: number;
   linha?: string; // linha comercial lida do nome (Bronze, Prata, Efetivo...); só no catálogo ANS
+  tipoCopart?: "Parcial" | "Completa"; // quando o nome permite saber (hoje só Amil)
   contratacao: Contratacao;
   aceitaMei: boolean;
   abrangencia: "Municipal" | "Grupo de municípios" | "Estadual" | "Nacional";

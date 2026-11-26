@@ -189,7 +189,18 @@ js_true "(()=>{const i=document.querySelector('[data-operadora=\"ans-326305\"] i
 tem "Amil"
 ok "seletor: cidade e ícone da operadora"
 passo click '[data-operadora="ans-326305"]'
-passo wait "input[data-plano]"
+passo wait --fn "!!document.querySelector('input[data-plano], [data-lista-linhas]')"
+# Base ANS: primeiro a lista de linhas (como as tabelas do Painel); escolhe Bronze (ou a primeira) e volta uma vez.
+if capt eval "!!document.querySelector('[data-lista-linhas]')" && [ "$SAIDA" = "true" ]; then
+  js_true "document.querySelectorAll('[data-linha]').length>1&&/a partir de/.test(document.querySelector('[data-lista-linhas]').innerText)" "lista de linhas sem linhas ou sem preço"
+  passo eval "(document.querySelector('[data-linha=\"Bronze\"]')||document.querySelector('[data-linha]')).click()"
+  passo wait "input[data-plano]"
+  passo click "[data-voltar-linhas]"
+  passo wait "[data-lista-linhas]"
+  passo eval "(document.querySelector('[data-linha=\"Bronze\"]')||document.querySelector('[data-linha]')).click()"
+  passo wait "input[data-plano]"
+  ok "seletor: linhas da operadora"
+fi
 # Filtros dentro da operadora (linha, acomodação...): escolher uma opção deixa só os planos dela.
 if capt eval "!!document.querySelector('[data-filtro-op]')" && [ "$SAIDA" = "true" ]; then
   js_true "(()=>{const b=document.querySelector('[data-filtro-op]:not([disabled])');const n=+/\\((\\d+)\\)/.exec(b.innerText)[1];b.click();return new Promise(r=>setTimeout(()=>r(document.querySelectorAll('input[data-plano]').length===n&&b.getAttribute('aria-pressed')==='true'),300))})()" "filtro dentro da operadora não filtra os planos"

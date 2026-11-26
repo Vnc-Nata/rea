@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { linhaDoPlano, percentualCopartDoNome } from "../../lib/linhas";
+import { linhaDoPlano, percentualCopartDoNome, tipoCopartDoNome } from "../../lib/linhas";
 
 test("linha: primeiro termo depois da marca, nomes reais da ANS", () => {
   const casos: [string, string][] = [
@@ -25,6 +25,14 @@ test("linha: primeiro termo depois da marca, nomes reais da ANS", () => {
     ["Amil", "Outros"],
   ];
   for (const [nome, linha] of casos) assert.equal(linhaDoPlano(nome), linha, nome);
+});
+
+test("coparticipação parcial/completa da Amil pelo nome; outras operadoras desconhecido", () => {
+  assert.equal(tipoCopartDoNome("Amil PJ Bronze SP QC Copart TP", "Amil"), "Parcial");
+  assert.equal(tipoCopartDoNome("Amil PJ Bronze SP QC Copart", "Amil"), "Completa");
+  assert.equal(tipoCopartDoNome("Amil Black I QP R copart TP PJ", "Amil"), "Parcial");
+  assert.equal(tipoCopartDoNome("Amil Empresarial Ouro QC", "Amil"), undefined);
+  assert.equal(tipoCopartDoNome("Bradesco Saúde Efetivo IV E CE copart", "Bradesco Saúde"), undefined);
 });
 
 test("percentual de coparticipação só quando escrito no nome", () => {

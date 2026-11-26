@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ChevronDown,
+  ChevronRight,
   Copy,
   EllipsisVertical,
   Mail,
@@ -371,7 +372,8 @@ function PlanoCard({
 
 function rotuloCopart(p: Plano) {
   if (p.coparticipacao !== "Com coparticipação") return "Sem coparticipação";
-  return p.percentualCopart != null ? `Coparticipação ${p.percentualCopart}%` : "Com coparticipação";
+  if (p.percentualCopart != null) return `Coparticipação ${p.percentualCopart}%`;
+  return p.tipoCopart ? `Coparticipação ${p.tipoCopart.toLowerCase()}` : "Com coparticipação";
 }
 
 function PlanoIndisponivel({ onRemove }: { onRemove: () => void }) {
@@ -559,7 +561,8 @@ function FiltrosOperadora({
   filtro: FiltroOperadora;
   onChange: (f: FiltroOperadora) => void;
 }) {
-  const grupos = CHAVES_OP.map((k) => {
+  // A linha é escolhida na lista de linhas (ListaLinhas), não aqui.
+  const grupos = CHAVES_OP.filter((k) => k !== "linha").map((k) => {
     const outros = planos.filter((p) => CHAVES_OP.every((j) => j === k || !filtro[j] || valorFiltroOp(p, j) === filtro[j]));
     const cont = new Map<string, number>(planos.map((p) => [valorFiltroOp(p, k), 0]));
     for (const p of outros) cont.set(valorFiltroOp(p, k), cont.get(valorFiltroOp(p, k))! + 1);
@@ -601,6 +604,69 @@ function FiltrosOperadora({
           })}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Linhas da operadora (Bronze, Prata, Ouro...), como as tabelas do Painel: uma linha por grupo, com acomodações e
+ * coparticipação disponíveis, quantos planos e o menor preço total. Clicar abre os planos da linha.
+ */
+function ListaLinhas({
+  planos,
+  totais,
+  selecionados,
+  onEscolher,
+}: {
+  planos: Plano[];
+  totais: Map<string, number>;
+  selecionados: string[];
+  onEscolher: (linha: string) => void;
+}) {
+  const grupos = new Map<string, Plano[]>();
+  for (const p of planos) {
+    const l = p.linha ?? "Outros";
+    const g = grupos.get(l);
+    if (g) g.push(p);
+    else grupos.set(l, [p]);
+  }
+  const menor = (ps: Plano[]) => Math.min(...ps.map((p) => totais.get(p.id) ?? Infinity));
+  const linhas = [...grupos.entries()].sort((a, b) => menor(a[1]) - menor(b[1]));
+  const valores = (ps: Plano[], f: (p: Plano) => string) => [...new Set(ps.map(f))].join(" · ");
+  return (
+    <div className="divide-y rounded border" data-lista-linhas>
+      {linhas.map(([linha, ps]) => {
+        const n = ps.filter((p) => selecionados.includes(p.id)).length;
+        return (
+          <button
+            key={linha}
+            type="button"
+            data-linha={linha}
+            onClick={() => onEscolher(linha)}
+            className="flex w-full items-center gap-4 p-4 text-left hover:bg-muted/50"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">
+                {linha}
+                {n > 0 && (
+                  <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">{n}</span>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {valores(ps, (p) => (p.acomodacao === "Quarto Individual" ? "Apartamento" : "Enfermaria"))} ·{" "}
+                {valores(ps, rotuloCopart)} · {ps.length} plano{ps.length === 1 ? "" : "s"}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-muted-foreground">a partir de</div>
+              <span className="text-xs">R$ </span>
+              <span className="text-lg font-semibold text-primary">{numero(menor(ps))}</span>
+              <div className="text-xs text-muted-foreground">/mês</div>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1004,9 +1070,19 @@ function SeletorPlanos({
               )
             ) : (
               <div className="space-y-4">
-                <button onClick={() => setOpSel(null)} className="flex items-center gap-2 text-sm text-primary">
-                  <ArrowLeft className="h-4" /> Todas as operadoras
-                </button>
+                {filtroOp.linha ? (
+                  <button
+                    onClick={() => setFiltroOp({ ...filtroOp, linha: undefined })}
+                    className="flex items-center gap-2 text-sm text-primary"
+                    data-voltar-linhas
+                  >
+                    <ArrowLeft className="h-4" /> {op.nome} • {filtroOp.linha}
+                  </button>
+                ) : (
+                  <button onClick={() => setOpSel(null)} className="flex items-center gap-2 text-sm text-primary">
+                    <ArrowLeft className="h-4" /> Todas as operadoras
+                  </button>
+                )}
                 <div className="flex items-center gap-4">
                   <OperadoraLogo op={op} tamanho={40} className="text-2xl" />
                   {op.idss != null && (
@@ -1019,6 +1095,15 @@ function SeletorPlanos({
                   )}
                 </div>
                 <FiltrosOperadora planos={planosOp} totais={totais} filtro={filtroOp} onChange={setFiltroOp} />
+                {/* Como no Painel: primeiro as linhas da operadora, depois os planos da linha escolhida. */}
+                {!filtroOp.linha && new Set(planosOpVisiveis.map((p) => p.linha ?? "Outros")).size > 1 ? (
+                  <ListaLinhas
+                    planos={planosOpVisiveis}
+                    totais={totais}
+                    selecionados={selecionados}
+                    onEscolher={(linha) => setFiltroOp({ ...filtroOp, linha })}
+                  />
+                ) : (
                 <div className="divide-y rounded border">
                   {planosOpVisiveis.length === 0 && (
                     <p className="p-4 text-center text-sm text-muted-foreground">Nenhum plano com esses filtros.</p>
@@ -1060,6 +1145,7 @@ function SeletorPlanos({
                       );
                     })}
                 </div>
+                )}
               </div>
             )}
           </div>
