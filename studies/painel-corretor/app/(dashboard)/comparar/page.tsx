@@ -29,6 +29,8 @@ export default function CompararPage() {
   const porOp = new Map<string, SugestaoOp & { pares: Par[] }>();
   for (const l of linhas) {
     if (!l.operadora || !l.plano || l.nosso == null || l.valorPainel == null) continue;
+    // O ajuste só mexe no preço de referência ANS; preço de tabela de venda não entra na sugestão.
+    if (l.plano.origemPreco !== "ans") continue;
     const e = porOp.get(l.operadora.id) ?? {
       operadora: l.operadora,
       ajusteAtual: ajustes[l.operadora.id] ?? 0,

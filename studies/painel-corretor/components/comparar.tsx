@@ -116,7 +116,7 @@ export function Comparar({
             </ul>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Informe o valor do Painel em algum caso para ver a sugestão.
+              Informe o valor do Painel em algum caso com preço de Referência ANS para ver a sugestão.
             </p>
           )}
         </Panel>
@@ -154,6 +154,11 @@ function LinhaCaso({ l }: { l: Linha }) {
           <div className="grid justify-items-end">
             <span className="font-medium">{moeda(l.nosso)}</span>
             {l.plano && <OrigemPreco plano={l.plano} />}
+            {l.plano?.origemPreco === "tabela" && (
+              <span className="text-xs text-muted-foreground" data-fora-sugestao>
+                Não entra no ajuste sugerido
+              </span>
+            )}
           </div>
         ) : (
           <span className="text-muted-foreground">{l.plano ? "sem preço" : "-"}</span>
