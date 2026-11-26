@@ -50,5 +50,6 @@ export function alternar(sel: string[] | undefined, v: string, todos: string[]):
 /** "3 regiões", "5 itens": quantos estão marcados (ou o total quando são todos). */
 export function rotuloContagem(sel: string[] | undefined, todos: string[], nome: string): string {
   const n = sel ? todos.filter((x) => sel.includes(x)).length : todos.length;
-  return `${n} ${nome}`;
+  const singular: Record<string, string> = { "regiões": "região", itens: "item" };
+  return `${n} ${n === 1 ? (singular[nome] ?? nome) : nome}`;
 }

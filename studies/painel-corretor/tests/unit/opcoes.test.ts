@@ -52,6 +52,6 @@ test("alternar: desmarcar a partir de todos vira lista; marcar tudo volta a unde
 
 test("rotuloContagem: selecionados (só os que existem) ou total", () => {
   assert.equal(rotuloContagem(undefined, ["A", "B", "C"], "regiões"), "3 regiões");
-  assert.equal(rotuloContagem(["A", "X"], ["A", "B"], "regiões"), "1 regiões");
+  assert.equal(rotuloContagem(["A", "X"], ["A", "B"], "regiões"), "1 região");
   assert.equal(rotuloContagem([], ["A"], "itens"), "0 itens");
 });
