@@ -58,6 +58,7 @@ export interface Plano {
   acomodacao: Acomodacao;
   coparticipacao: Coparticipacao;
   percentualCopart?: number;
+  linha?: string; // linha comercial lida do nome (Bronze, Prata, Efetivo...); só no catálogo ANS
   contratacao: Contratacao;
   aceitaMei: boolean;
   abrangencia: "Municipal" | "Grupo de municípios" | "Estadual" | "Nacional";

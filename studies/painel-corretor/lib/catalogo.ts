@@ -16,6 +16,7 @@ import {
   type RedeAns,
 } from "./ans";
 import { lerConta } from "./conta-db";
+import { linhaDoPlano, percentualCopartDoNome } from "./linhas";
 import { mtimeDb, readDb } from "./db";
 import { capitalizar, rotuloMunicipio } from "./municipios";
 import { CIDADES } from "./seed";
@@ -261,6 +262,8 @@ function converterSemAjustes(
       modalidade,
       acomodacao: norm(pa.acomodacao) === "individual" ? "Quarto Individual" : "Quarto Coletivo",
       coparticipacao: norm(pa.fatorModerador) !== "ausente" ? "Com coparticipação" : "Sem coparticipação",
+      percentualCopart: norm(pa.fatorModerador) !== "ausente" ? percentualCopartDoNome(pa.nome) : undefined,
+      linha: linhaDoPlano(pa.nome),
       contratacao: "Opcional", // a ANS não publica; mantido neutro
       aceitaMei: modalidade === "PME",
       abrangencia: ABRANGENCIAS[norm(pa.abrangencia)] ?? "Nacional",

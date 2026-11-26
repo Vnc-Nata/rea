@@ -52,7 +52,6 @@ import {
   Input,
   Label,
   Modal,
-  Select,
   ToggleGroup,
   buttonClass,
   useToast,
@@ -528,6 +527,177 @@ const FILTROS = {
   contratacao: ["Opcional", "Compulsória"],
 } as const;
 
+const CHAVES_OP = ["linha", "acomodacao", "coparticipacao", "abrangencia"] as const;
+type ChaveOp = (typeof CHAVES_OP)[number];
+type FiltroOperadora = Partial<Record<ChaveOp, string>>;
+const TITULOS_OP: Record<ChaveOp, string> = {
+  linha: "Linha",
+  acomodacao: "Acomodação",
+  coparticipacao: "Coparticipação",
+  abrangencia: "Abrangência",
+};
+
+function valorFiltroOp(p: Plano, k: ChaveOp): string {
+  if (k === "linha") return p.linha ?? "Outros";
+  if (k === "acomodacao") return p.acomodacao === "Quarto Individual" ? "Apartamento" : "Enfermaria";
+  if (k === "coparticipacao") return rotuloCopart(p);
+  return p.abrangencia;
+}
+
+/**
+ * Botões de filtro dentro da operadora: um grupo por característica, com as opções que existem nos planos dela e a
+ * contagem considerando os outros filtros já escolhidos. Grupo com uma opção só não aparece (não filtra nada).
+ */
+function FiltrosOperadora({
+  planos,
+  totais,
+  filtro,
+  onChange,
+}: {
+  planos: Plano[];
+  totais: Map<string, number>;
+  filtro: FiltroOperadora;
+  onChange: (f: FiltroOperadora) => void;
+}) {
+  const grupos = CHAVES_OP.map((k) => {
+    const outros = planos.filter((p) => CHAVES_OP.every((j) => j === k || !filtro[j] || valorFiltroOp(p, j) === filtro[j]));
+    const cont = new Map<string, number>(planos.map((p) => [valorFiltroOp(p, k), 0]));
+    for (const p of outros) cont.set(valorFiltroOp(p, k), cont.get(valorFiltroOp(p, k))! + 1);
+    // Ordem do mais barato ao mais caro (menor preço total de cada opção): Bronze, Prata, Ouro, Platinum, Black...
+    const menor = new Map<string, number>();
+    for (const p of planos) {
+      const v = valorFiltroOp(p, k);
+      menor.set(v, Math.min(menor.get(v) ?? Infinity, totais.get(p.id) ?? Infinity));
+    }
+    return {
+      k,
+      opcoes: [...cont.entries()].sort((a, b) => menor.get(a[0])! - menor.get(b[0])! || a[0].localeCompare(b[0], "pt-BR")),
+    };
+  }).filter((g) => g.opcoes.length > 1);
+  if (!grupos.length) return null;
+  return (
+    <div className="space-y-2 rounded border p-3" data-filtros-operadora>
+      {grupos.map(({ k, opcoes }) => (
+        <div key={k} className="flex flex-wrap items-center gap-1.5">
+          <span className="w-28 shrink-0 text-xs font-medium text-muted-foreground">{TITULOS_OP[k]}</span>
+          {opcoes.map(([v, n]) => {
+            const ativo = filtro[k] === v;
+            return (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={ativo}
+                data-filtro-op={k}
+                disabled={!n && !ativo}
+                onClick={() => onChange({ ...filtro, [k]: ativo ? undefined : v })}
+                className={cn(
+                  "rounded-full border px-2.5 py-0.5 text-xs transition-colors disabled:opacity-40",
+                  ativo ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
+                )}
+              >
+                {v} <span className={ativo ? "opacity-80" : "text-muted-foreground"}>({n})</span>
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Busca de hospital de preferência: digita parte do nome (ou da cidade) e escolhe na lista abaixo. A lista mostra os
+ * hospitais da cidade da cotação primeiro; cada palavra digitada precisa aparecer (ex.: "einstein", "sirio libanes").
+ */
+function BuscaHospital({
+  hospitais,
+  texto,
+  onTexto,
+  cidade,
+  onAdd,
+}: {
+  hospitais: Hospital[];
+  texto: string;
+  onTexto: (t: string) => void;
+  cidade: string;
+  onAdd: (id: string) => void;
+}) {
+  const [aberta, setAberta] = useState(false);
+  const [ativo, setAtivo] = useState(0);
+  const lista = useMemo(() => {
+    const daCidade = hospitais.filter((h) => h.regiao === cidade);
+    const outros = hospitais.filter((h) => h.regiao !== cidade);
+    return [...daCidade, ...outros].slice(0, 60);
+  }, [hospitais, cidade]);
+  useEffect(() => setAtivo(0), [texto]);
+  const escolher = (h: Hospital | undefined) => {
+    if (!h) return;
+    onAdd(h.id);
+    setAberta(false);
+  };
+  return (
+    <div className="relative">
+      <Input
+        type="search"
+        role="combobox"
+        aria-expanded={aberta}
+        aria-controls="lista-hospitais"
+        aria-label="Buscar hospital"
+        placeholder="Digite o hospital ou a cidade"
+        className="h-8"
+        value={texto}
+        onFocus={() => setAberta(true)}
+        onBlur={() => setTimeout(() => setAberta(false), 150)}
+        onChange={(e) => {
+          onTexto(e.target.value);
+          setAberta(true);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") setAtivo((i) => Math.min(i + 1, lista.length - 1));
+          else if (e.key === "ArrowUp") setAtivo((i) => Math.max(i - 1, 0));
+          else if (e.key === "Enter") {
+            e.preventDefault();
+            escolher(lista[ativo]);
+          } else if (e.key === "Escape" && aberta) {
+            // Fecha só a lista; sem isso o Esc também fecharia o seletor de planos.
+            e.stopPropagation();
+            setAberta(false);
+          } else return;
+          e.preventDefault();
+        }}
+      />
+      {aberta && (
+        <ul
+          id="lista-hospitais"
+          role="listbox"
+          className="absolute z-20 mt-1 max-h-64 w-72 overflow-y-auto rounded border bg-background text-sm shadow-md"
+        >
+          {lista.length === 0 && <li className="p-2 text-muted-foreground">Nenhum hospital encontrado</li>}
+          {lista.map((h, i) => (
+            <li key={h.id} role="option" aria-selected={i === ativo}>
+              <button
+                type="button"
+                data-hospital={h.id}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => escolher(h)}
+                className={cn("block w-full px-2 py-1.5 text-left hover:bg-muted", i === ativo && "bg-muted")}
+              >
+                <span className="block leading-tight">{h.nome}</span>
+                <span className="text-xs text-muted-foreground">{h.regiao}</span>
+              </button>
+            </li>
+          ))}
+          {hospitais.length > lista.length && (
+            <li className="p-2 text-xs text-muted-foreground">
+              Mostrando {lista.length} de {hospitais.length}. Digite mais para refinar.
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 const semAcento = (s: string) =>
   s
     .normalize("NFD")
@@ -606,13 +776,13 @@ function SeletorPlanos({
   // Hospitais da rede dos planos filtrados (o servidor já manda só os da UF da cidade, em ordem alfabética).
   const naRede = useMemo(() => new Set(base.flatMap((p) => p.rede.map((r) => r.hospitalId))), [base]);
   const hospDisponiveis = useMemo(() => {
-    const buscaHosp = semAcento(textoHosp.trim());
-    return hospitais.filter(
-      (h) =>
-        naRede.has(h.id) &&
-        !hospPref.includes(h.id) &&
-        (!buscaHosp || semAcento(`${h.nome} ${h.regiao}`).includes(buscaHosp)),
-    );
+    // Cada palavra digitada precisa aparecer no nome ou na cidade (os nomes da ANS vêm abreviados e fora de ordem).
+    const palavras = semAcento(textoHosp).split(/\s+/).filter(Boolean);
+    return hospitais.filter((h) => {
+      if (!naRede.has(h.id) || hospPref.includes(h.id)) return false;
+      const alvo = semAcento(`${h.nome} ${h.regiao}`);
+      return palavras.every((w) => alvo.includes(w));
+    });
   }, [hospitais, naRede, hospPref, textoHosp]);
   const filtrados = useMemo(
     () =>
@@ -635,6 +805,14 @@ function SeletorPlanos({
   }, [operadoras, filtrados]);
   const op = ops.find((o) => o.id === opSel);
   const operadoraDoPlano = useMemo(() => new Map(planos.map((p) => [p.id, p.operadoraId])), [planos]);
+  // Filtros dentro da operadora aberta (linha, acomodação, coparticipação, abrangência), como no Painel.
+  const [filtroOp, setFiltroOp] = useState<FiltroOperadora>({});
+  useEffect(() => setFiltroOp({}), [opSel]);
+  const planosOp = useMemo(() => filtrados.filter((p) => p.operadoraId === opSel), [filtrados, opSel]);
+  const planosOpVisiveis = useMemo(
+    () => planosOp.filter((p) => CHAVES_OP.every((k) => !filtroOp[k] || valorFiltroOp(p, k) === filtroOp[k])),
+    [planosOp, filtroOp],
+  );
 
   function set<K extends keyof FiltroCotacao>(k: K, v: FiltroCotacao[K]) {
     const f = { ...filtro, [k]: v };
@@ -740,34 +918,16 @@ function SeletorPlanos({
             </div>
             <div className="px-2">
               <div className="mb-2 text-sm font-medium">Hospitais de preferência</div>
-              {(hospDisponiveis.length > 15 || textoHosp) && (
-                <Input
-                  type="search"
-                  placeholder="Buscar hospital ou cidade"
-                  aria-label="Buscar hospital"
-                  className="mb-2 h-8"
-                  value={textoHosp}
-                  onChange={(e) => setTextoHosp(e.target.value)}
-                />
-              )}
-              <Select
-                value=""
-                aria-label="Adicionar hospital"
-                onChange={(e) => e.target.value && setHospPref((h) => [...new Set([...h, e.target.value])])}
-              >
-                <option value="">
-                  {hospDisponiveis.length
-                    ? `Adicionar hospital... (${hospDisponiveis.length})`
-                    : textoHosp
-                      ? "Nenhum hospital encontrado"
-                      : "Adicionar hospital..."}
-                </option>
-                {hospDisponiveis.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.uf && h.regiao !== filtro.cidade ? `${h.nome} (${h.regiao})` : h.nome}
-                  </option>
-                ))}
-              </Select>
+              <BuscaHospital
+                hospitais={hospDisponiveis}
+                texto={textoHosp}
+                onTexto={setTextoHosp}
+                cidade={filtro.cidade}
+                onAdd={(id) => {
+                  setHospPref((h) => [...new Set([...h, id])]);
+                  setTextoHosp("");
+                }}
+              />
               <ul className="mt-2 space-y-1 text-sm">
                 {hospPref.map((id) => (
                   <li key={id} className="flex items-center justify-between gap-2">
@@ -858,10 +1018,12 @@ function SeletorPlanos({
                     </span>
                   )}
                 </div>
+                <FiltrosOperadora planos={planosOp} totais={totais} filtro={filtroOp} onChange={setFiltroOp} />
                 <div className="divide-y rounded border">
-                  {filtrados
-                    .filter((p) => p.operadoraId === op.id)
-                    .map((p) => {
+                  {planosOpVisiveis.length === 0 && (
+                    <p className="p-4 text-center text-sm text-muted-foreground">Nenhum plano com esses filtros.</p>
+                  )}
+                  {planosOpVisiveis.map((p) => {
                       const ja = jaNaCotacao.has(p.id);
                       const sel = selecionados.includes(p.id);
                       return (

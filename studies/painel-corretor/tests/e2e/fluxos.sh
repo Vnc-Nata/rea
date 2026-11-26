@@ -175,13 +175,27 @@ passo find label "Cidade" fill "São Caetano do Sul - SP" --exact
 # A lista é recarregada ao trocar a cidade: espera a Amil com "N planos" (N ≥ 1; o número depende da base).
 passo wait 500
 lento wait --fn "!document.querySelector('[aria-busy=\"true\"]')&&/(^|\\D)[1-9]\\d* planos?/.test((document.querySelector('[data-operadora=\"ans-326305\"]')||{innerText:''}).innerText)"
-# Hospitais de preferência: só da UF da cidade (SP); hospitais de outra cidade aparecem como "Nome (Cidade - UF)".
-js_true "[...document.querySelectorAll('select[aria-label=\"Adicionar hospital\"] option')].slice(1).every(o=>!/ - [A-Z]{2}\\)\$/.test(o.textContent)||/ - SP\\)\$/.test(o.textContent))" "hospitais de preferência de outra UF"
+# Hospitais de preferência: busca digitando; a lista só traz hospitais da UF da cidade (SP).
+passo click '[aria-label="Buscar hospital"]'
+passo wait "[data-hospital]"
+js_true "[...document.querySelectorAll('[data-hospital]')].every(b=>/ - SP\$/.test(b.innerText.trim()))" "hospitais de preferência de outra UF"
+# Digitar filtra por palavra (todas precisam aparecer no nome ou na cidade).
+passo fill '[aria-label="Buscar hospital"]' "sao caetano"
+passo wait 300
+js_true "(()=>{const l=[...document.querySelectorAll('[data-hospital]')];return l.length>0&&l.every(b=>/s[aã]o caetano/i.test(b.innerText))})()" "busca de hospital não filtra pelo texto"
+passo fill '[aria-label="Buscar hospital"]' ""
+passo press Escape
 js_true "(()=>{const i=document.querySelector('[data-operadora=\"ans-326305\"] img, [data-operadora=\"ans-326305\"] [data-sigla]');return !!i&&i.getBoundingClientRect().width>0})()" "ícone da operadora não está visível no seletor"
 tem "Amil"
 ok "seletor: cidade e ícone da operadora"
 passo click '[data-operadora="ans-326305"]'
 passo wait "input[data-plano]"
+# Filtros dentro da operadora (linha, acomodação...): escolher uma opção deixa só os planos dela.
+if capt eval "!!document.querySelector('[data-filtro-op]')" && [ "$SAIDA" = "true" ]; then
+  js_true "(()=>{const b=document.querySelector('[data-filtro-op]:not([disabled])');const n=+/\\((\\d+)\\)/.exec(b.innerText)[1];b.click();return new Promise(r=>setTimeout(()=>r(document.querySelectorAll('input[data-plano]').length===n&&b.getAttribute('aria-pressed')==='true'),300))})()" "filtro dentro da operadora não filtra os planos"
+  passo eval "document.querySelector('[data-filtro-op][aria-pressed=\"true\"]').click()"
+  ok "seletor: filtros dentro da operadora"
+fi
 js_true "$ORIGEM_JS" "origem do preço não aparece no seletor"
 js_true "/R\\$\\s*\\d/.test(document.body.innerText)" "preço não aparece no seletor"
 # Escolhe o primeiro plano com rede hospitalar ("N hospitais", N ≥ 1): o passo 6b precisa de regiões da rede.
