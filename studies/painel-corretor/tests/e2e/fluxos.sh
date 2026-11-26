@@ -194,8 +194,8 @@ espera "Adicionar Plano"
 abrir_menu
 passo find role button click --name "Opções" --exact
 espera "Defina o que o cliente verá na proposta."
-js_true "/^[1-9]\\d* regiões$/.test(document.querySelector('[data-lista=\"regioes\"]').textContent.trim())" "botão de regiões sem a contagem"
-js_true "/^[1-9]\\d* itens$/.test(document.querySelector('[data-lista=\"itens\"]').textContent.trim())" "botão de itens sem a contagem"
+js_true "/^[1-9]\\d* regi(ões|ão)$/.test(document.querySelector('[data-lista=\"regioes\"]').textContent.trim())" "botão de regiões sem a contagem"
+js_true "/^[1-9]\\d* ite(ns|m)$/.test(document.querySelector('[data-lista=\"itens\"]').textContent.trim())" "botão de itens sem a contagem"
 passo click '[data-lista="regioes"]'
 passo wait '[data-checklist="regioes"]'
 passo find text "Desmarcar todos" click --exact
