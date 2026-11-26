@@ -1,6 +1,7 @@
 import { Database } from "lucide-react";
 import Link from "next/link";
-import { estimativa, filtrarPlanos, lerBaseAns, opcoes, vcmPrincipal, type FiltroAns } from "@/lib/ans";
+import { AvisoBaseIlegivel } from "@/components/busca-ans-real";
+import { estimativa, filtrarPlanos, lerBaseAnsSegura, opcoes, vcmPrincipal, type FiltroAns } from "@/lib/ans";
 import { buttonClass } from "@/lib/button";
 import { faixaLabel } from "@/lib/types";
 import { FAIXAS } from "@/lib/types";
@@ -34,7 +35,8 @@ const dataBr = (iso?: string) => (iso ? iso.split("-").reverse().join("/") : "�
 
 export default async function BaseAnsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
-  const base = lerBaseAns();
+  const { base, ilegivel } = lerBaseAnsSegura();
+  if (ilegivel) return <AvisoBaseIlegivel />;
 
   if (!base) {
     return (
@@ -46,8 +48,8 @@ export default async function BaseAnsPage({ searchParams }: { searchParams: Prom
           <p className="text-sm">A base ainda não foi importada. No terminal, dentro desta pasta, rode:</p>
           <pre className="mt-3 rounded bg-muted p-3 text-sm">npm run importar-ans -- --uf SP</pre>
           <p className="mt-3 text-sm text-muted-foreground">
-            O script baixa os dados abertos da ANS das operadoras listadas em <code>data/ans/operadoras-alvo.json</code> e
-            grava <code>data/ans/base.json</code>. Depois, recarregue esta página.
+            O script baixa os dados abertos da ANS das operadoras listadas em <code>data/ans/operadoras-alvo.json</code>{" "}
+            e grava <code>data/ans/base.json</code>. Depois, recarregue esta página.
           </p>
         </div>
       </div>
@@ -72,7 +74,9 @@ export default async function BaseAnsPage({ searchParams }: { searchParams: Prom
     f.uf && base.ufsDetalhadas.includes(f.uf)
       ? [
           ...new Map(
-            base.planos.flatMap((p) => p.municipios.filter((m) => m.nome.endsWith(`/${f.uf}`)).map((m) => [m.codigo, m.nome])),
+            base.planos.flatMap((p) =>
+              p.municipios.filter((m) => m.nome.endsWith(`/${f.uf}`)).map((m) => [m.codigo, m.nome]),
+            ),
           ),
         ].sort((a, b) => a[1].localeCompare(b[1], "pt-BR"))
       : [];
@@ -90,8 +94,8 @@ export default async function BaseAnsPage({ searchParams }: { searchParams: Prom
             <Database className="h-6 w-6" /> Base ANS
           </h1>
           <p className="text-sm text-muted-foreground">
-            {base.operadoras.length} operadoras, {base.planos.length.toLocaleString("pt-BR")} planos ativos. Importada em{" "}
-            {new Date(base.geradoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.
+            {base.operadoras.length} operadoras, {base.planos.length.toLocaleString("pt-BR")} planos ativos. Importada
+            em {new Date(base.geradoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.
           </p>
         </div>
       </div>
@@ -120,9 +124,7 @@ export default async function BaseAnsPage({ searchParams }: { searchParams: Prom
             ]}
           />
           <Sel name="uf" value={f.uf} label="UF de comercialização" opts={op.ufs.map((u) => [u, u])} />
-          {municipios.length > 0 && (
-            <Sel name="municipio" value={f.municipio} label="Município" opts={municipios} />
-          )}
+          {municipios.length > 0 && <Sel name="municipio" value={f.municipio} label="Município" opts={municipios} />}
           <label className="flex items-center gap-2 self-end pb-2 text-sm">
             <input type="checkbox" name="vcm" value="1" defaultChecked={f.vcm === "1"} /> Só planos com VCM
           </label>

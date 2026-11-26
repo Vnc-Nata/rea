@@ -465,7 +465,10 @@ export async function indicadores(fonte, registros) {
 
 function gravar(arq, dados) {
   fs.mkdirSync(path.dirname(arq), { recursive: true });
-  fs.writeFileSync(arq, JSON.stringify(dados));
+  // Grava em <arq>.tmp e renomeia: o painel nunca lê um arquivo pela metade.
+  const tmp = `${arq}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(dados));
+  fs.renameSync(tmp, arq);
   log(`Gravado ${path.relative(process.cwd(), arq)} (${(fs.statSync(arq).size / 1e6).toFixed(1)} MB)`);
 }
 

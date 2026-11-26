@@ -386,3 +386,17 @@ export function BuscaAnsRealDetalhe({
     </>
   );
 }
+
+export function AvisoBaseIlegivel() {
+  return (
+    <div className="mx-auto max-w-3xl p-6">
+      <div className="rounded-sm border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900 shadow-sm dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+        <p className="font-medium">A base ANS está sendo atualizada ou está ilegível.</p>
+        <p className="mt-2">
+          Aguarde a importação terminar e recarregue a página. Se o aviso continuar, rode de novo{" "}
+          <code>npm run importar-ans</code>.
+        </p>
+      </div>
+    </div>
+  );
+}

@@ -6,3 +6,4 @@ data/ans/base.json
 public/logos/
 data/ans/rede.json
 data/ans/indicadores.json
+data/ans/*.json.tmp

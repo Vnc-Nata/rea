@@ -105,6 +105,25 @@ export function lerBaseAns(): BaseAns | null {
   return lerJson<BaseAns>("base.json");
 }
 
+/** Como lerBaseAns, mas não lança: base.json corrompida ou pela metade vira { ilegivel: true }. */
+export function lerBaseAnsSegura(): { base: BaseAns | null; ilegivel: boolean } {
+  try {
+    return { base: lerBaseAns(), ilegivel: false };
+  } catch (e) {
+    console.warn(`[ans] base.json ilegível em ${dirAns()}.`, e);
+    return { base: null, ilegivel: true };
+  }
+}
+
+/** Lê um arquivo opcional da base (rede, indicadores) sem derrubar a página se estiver ilegível. */
+export function semErro<T>(ler: () => T | null): T | null {
+  try {
+    return ler();
+  } catch {
+    return null;
+  }
+}
+
 export function lerRedeAns(): RedeAns | null {
   return lerJson<RedeAns>("rede.json");
 }

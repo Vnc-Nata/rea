@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { AnsHeader, BuscaAnsDetalhe } from "@/components/busca-ans";
-import { BuscaAnsRealDetalhe } from "@/components/busca-ans-real";
-import { lerBaseAns, lerIndicadoresAns, lerRedeAns } from "@/lib/ans";
+import { AvisoBaseIlegivel, BuscaAnsRealDetalhe } from "@/components/busca-ans-real";
+import { lerBaseAnsSegura, lerIndicadoresAns, lerRedeAns, semErro } from "@/lib/ans";
 import { catalogo } from "@/lib/catalogo";
 
 export const dynamic = "force-dynamic";
@@ -15,15 +15,16 @@ export default async function BuscaAnsOperadora({
 }) {
   const { registro } = await params;
   const sp = await searchParams;
-  const base = lerBaseAns();
+  const { base, ilegivel } = lerBaseAnsSegura();
+  if (ilegivel) return <AvisoBaseIlegivel />;
   if (base?.operadoras.some((o) => o.registroAns === registro))
     return (
       <BuscaAnsRealDetalhe
         base={base}
         registro={registro}
         sp={sp}
-        indicadores={lerIndicadoresAns()}
-        rede={lerRedeAns()}
+        indicadores={semErro(lerIndicadoresAns)}
+        rede={semErro(lerRedeAns)}
       />
     );
   const db = catalogo(); // sem base ANS: catálogo fictício
