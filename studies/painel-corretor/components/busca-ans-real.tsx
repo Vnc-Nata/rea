@@ -179,7 +179,8 @@ export function BuscaAnsRealDetalhe({
   if (!op) return null;
   const planos = filtrarPlanos(base, filtroDe(sp)).filter((p) => p.registroAns === registro);
   const todos = planos.length ? planos : base.planos.filter((p) => p.registroAns === registro);
-  const plano = todos.find((p) => p.id === sp.plano) ?? todos[0];
+  // Sem ?plano=, abre o primeiro plano com valor (VCM); só cai no primeiro da lista se nenhum tiver.
+  const plano = todos.find((p) => p.id === sp.plano) ?? todos.find((p) => p.vcm) ?? todos[0];
   const aba = ABAS.find((a) => a === sp.aba) ?? "Preços";
   const nome = op.nomeFantasia ?? op.razaoSocial;
   const ind = indicadores?.porOperadora[registro];

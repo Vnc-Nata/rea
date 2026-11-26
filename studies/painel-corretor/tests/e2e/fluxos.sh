@@ -138,7 +138,7 @@ limpar() {
 trap limpar EXIT
 
 command -v agent-browser >/dev/null || { echo "agent-browser não encontrado (npm i -g agent-browser && agent-browser install)." >&2; exit 2; }
-curl -fsS -o /dev/null "$BASE_URL/cotacoes" || { echo "Painel não responde em $BASE_URL." >&2; exit 2; }
+curl -fsS "$BASE_URL/cotacoes" >/dev/null || { echo "Painel não responde em $BASE_URL." >&2; exit 2; }
 
 echo "E2E contra $BASE_URL (sessão $SESSION)"
 
@@ -146,7 +146,7 @@ echo "E2E contra $BASE_URL (sessão $SESSION)"
 echo "aquecendo as páginas..."
 for p in /cotacoes /cotacoes/nova /cotacoes/e2e-aquecimento/edit /cotacoes/e2e-aquecimento \
   /cotacoes/e2e-aquecimento/cenarios/x /produtos /busca-ans /busca-ans/326305 /comparar; do
-  curl -s -o /dev/null --max-time 300 "$BASE_URL$p" </dev/null || true
+  curl -s --max-time 300 "$BASE_URL$p" </dev/null >/dev/null || true
 done
 
 # Sobe o daemon da sessão uma vez, sem nenhuma captura de saída (ver capt).
