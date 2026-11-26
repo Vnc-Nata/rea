@@ -25,6 +25,9 @@ git checkout claude/project-thread-k24z7s
 cd studies\painel-corretor
 ```
 
+Se o suporte avisar que a versão foi para a branch principal, rode `git checkout main` (dentro da pasta `rea`) e
+pronto: o `iniciar.bat` continua buscando as atualizações.
+
 3. Abra essa pasta no Explorador de Arquivos: `Documentos\rea\studies\painel-corretor`. Ela tem o arquivo
    **iniciar.bat**. Dica: clique com o botão direito nele > Enviar para > Área de trabalho (criar atalho).
 
@@ -53,8 +56,9 @@ npm run importar-ans -- --uf SP,MG --todas
 ```
 
 Troque `SP,MG` pelos estados em que você vende (por exemplo `SP,MG,RJ`). **Demora bastante** (baixa mais de 1 GB; deixe
-o computador ligado e conectado à internet). Quando terminar, reinicie o painel (feche a janela "Atan Prime Cotações" e
-dê duplo clique em `iniciar.bat`). Repita o comando quando quiser atualizar a base, por exemplo uma vez por mês.
+o computador ligado e conectado à internet). Quando terminar, basta atualizar a página no navegador (F5): o painel
+percebe a base nova sozinho, sem precisar reiniciar. Repita o comando quando quiser atualizar a base, por exemplo uma
+vez por mês.
 
 ## 5. Logos das operadoras (opcional)
 
@@ -94,6 +98,8 @@ tabela de venda.
 2. Em **Adicionar Plano**, escolha cidade, tipo (PF, PME ou Adesão), a operadora e marque os planos.
 3. Use **Compartilhar** para enviar a proposta ao cliente (WhatsApp, e-mail, link) e **Opções** para escolher o que o
    cliente vê (valores, rede, mais informações) e até quando a proposta vale.
+4. A proposta mostra sempre os **preços atuais**: se a tabela de venda ou o ajuste da operadora mudar, o link que você
+   já enviou passa a mostrar o preço novo. Para guardar o valor da data do envio, salve a proposta em PDF.
 
 ## Limites que você precisa saber
 
