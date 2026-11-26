@@ -181,6 +181,37 @@ espera "Referência ANS"
 tem "R$"
 ok "proposta pública com valores"
 
+# 6b. Opções: regiões da rede e itens de "Mais informações" -------------------------------------------------------------
+passo open "$BASE_URL/cotacoes/$COT_ID?preview=1"
+espera "Ver detalhes"
+passo find role link click --name "Ver detalhes" --exact
+espera "Tenho interesse"
+CEN_URL=$(ab get url)
+espera "Hospitais"
+tem "Quarto coletivo"
+passo open "$BASE_URL/cotacoes/$COT_ID/edit"
+espera "Adicionar Plano"
+abrir_menu
+passo find role button click --name "Opções" --exact
+espera "Defina o que o cliente verá na proposta."
+js_true "/^[1-9]\\d* regiões$/.test(document.querySelector('[data-lista=\"regioes\"]').textContent.trim())" "botão de regiões sem a contagem"
+js_true "/^[1-9]\\d* itens$/.test(document.querySelector('[data-lista=\"itens\"]').textContent.trim())" "botão de itens sem a contagem"
+passo click '[data-lista="regioes"]'
+passo wait '[data-checklist="regioes"]'
+passo find text "Desmarcar todos" click --exact
+js_true "document.querySelector('[data-lista=\"regioes\"]').textContent.trim()==='0 regiões'" "desmarcar regiões não zerou a contagem"
+passo click '[data-lista="itens"]'
+passo wait '[data-checklist="itens"]'
+passo find label "Acomodação" click --exact
+passo find role button click --name "Confirmar" --exact
+passo wait --fn "!document.body.innerText.includes('Defina o que o cliente verá')"
+passo open "$CEN_URL"
+espera "Tenho interesse"
+nao_tem "Hospitais"
+nao_tem "Quarto coletivo"
+tem "Abrangência"
+ok "opções: regiões e itens filtram a proposta"
+
 # 7. Produtos com filtros (MEI só existe na base fictícia; na base da ANS o filtro não aparece) ----------------------------
 passo open "$BASE_URL/produtos"
 passo wait 'a[href^="/produtos/"]'

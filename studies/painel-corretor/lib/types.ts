@@ -89,6 +89,8 @@ export interface OpcoesEnvio {
   valores: boolean;
   rede: boolean;
   maisInfo: boolean;
+  regioes?: string[]; // regiões da rede exibidas; undefined = todas
+  itens?: string[]; // chaves de "Mais informações" exibidas (ITENS_INFO em lib/opcoes); undefined = todas
 }
 export const OPCOES_PADRAO: OpcoesEnvio = { valores: true, rede: true, maisInfo: true };
 

@@ -61,7 +61,17 @@ export function PlanoIndisponivel({
   );
 }
 
-export function Comentario({ cotacaoId, cenarioId, value, editavel }: { cotacaoId: string; cenarioId: string; value: string; editavel: boolean }) {
+export function Comentario({
+  cotacaoId,
+  cenarioId,
+  value,
+  editavel,
+}: {
+  cotacaoId: string;
+  cenarioId: string;
+  value: string;
+  editavel: boolean;
+}) {
   if (!editavel) return value ? <p className="py-2 text-sm text-muted-foreground">{value}</p> : null;
   return (
     <textarea
@@ -77,7 +87,10 @@ export function CoparticipacaoDetalhes() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1 text-primary hover:text-primary/90">
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 text-primary hover:text-primary/90"
+      >
         Ver detalhes <ExternalLink className="w-4" />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Coparticipação">
@@ -103,10 +116,13 @@ export function RedeCards({ plano, op, hospitais }: { plano: Plano; op: Operador
       </div>
     </button>
   );
-  if (!plano.rede.length) return null;
+  // `hospitais` já vem filtrado pelas regiões marcadas em Opções; a contagem segue o mesmo filtro.
+  const ids = new Set(hospitais.map((h) => h.id));
+  const total = plano.rede.filter((r) => ids.has(r.hospitalId)).length;
+  if (!total) return null;
   return (
     <>
-      <Card titulo={`${plano.rede.length} Hospitais`} texto="Confira os principais hospitais da rede." icon={<HospitalIcon />} />
+      <Card titulo={`${total} Hospitais`} texto="Confira os principais hospitais da rede." icon={<HospitalIcon />} />
       {plano.laboratorios > 0 && (
         <Card
           titulo={`${plano.laboratorios} Laboratórios`}
@@ -114,7 +130,13 @@ export function RedeCards({ plano, op, hospitais }: { plano: Plano; op: Operador
           icon={<FlaskConical />}
         />
       )}
-      <Comparativo open={open} onClose={() => setOpen(false)} planos={[plano]} opMap={{ [op.id]: op }} hospitais={hospitais} />
+      <Comparativo
+        open={open}
+        onClose={() => setOpen(false)}
+        planos={[plano]}
+        opMap={{ [op.id]: op }}
+        hospitais={hospitais}
+      />
     </>
   );
 }

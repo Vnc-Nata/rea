@@ -12,6 +12,7 @@ import {
 import { buttonClass } from "@/lib/button";
 import { catalogo, operadoraPorId, planoPorId } from "@/lib/catalogo";
 import { readDb } from "@/lib/db";
+import { mostraItem, mostraRegiao } from "@/lib/opcoes";
 import { FAIXAS, OPCOES_PADRAO, faixaLabel } from "@/lib/types";
 import { numero, precoDisponivel, precoTotal, vidasPorFaixa } from "@/lib/utils";
 
@@ -42,65 +43,79 @@ export default async function Cenario({
         <PlanoIndisponivel cotacaoId={c.id} cenarioId={cen.id} removivel={!!preview} />
       </div>
     );
+  const o = c.opcoes ?? OPCOES_PADRAO;
   const hospIds = new Set(plano.rede.map((r) => r.hospitalId));
-  const hospitais = catalogo().hospitais.filter((h) => hospIds.has(h.id));
+  // Só os hospitais das regiões marcadas em Opções › Rede Credenciada.
+  const hospitais = catalogo().hospitais.filter((h) => hospIds.has(h.id) && mostraRegiao(o, h.regiao));
   const ficticio = plano.origemPreco === "ficticio";
   const vidas = vidasPorFaixa(c.grupos);
-  const o = c.opcoes ?? OPCOES_PADRAO;
+  const item = (k: Parameters<typeof mostraItem>[1]) => mostraItem(o, k);
   const tel = db.perfil.telefone.replace(/\D/g, "");
   const msg = `Olá, ${db.perfil.usuario}!\nTenho interesse neste plano de saúde. Pode me ajudar?\n\n${plano.nome} (${op.nome})`;
 
-  const detalhes = (
-    <dl className="grid divide-y divide-border lg:grid-cols-2 lg:divide-y-0">
-      <div className="border-border px-8 py-6 sm:border-t">
-        <dt className="text-sm font-medium leading-6">
-          {plano.acomodacao === "Quarto Individual"
-            ? "Quarto individual (apartamento)"
-            : "Quarto coletivo (enfermaria)"}
-        </dt>
-        <dd className="mt-1 text-sm leading-6 text-gray-500">
-          {plano.acomodacao === "Quarto Individual"
-            ? "Em caso de internação, o paciente fica em um quarto particular e com a possibilidade de ter um acompanhante."
-            : "Em caso de internação, o paciente divide o quarto com outros pacientes."}
-        </dd>
-      </div>
-      <div className="border-border px-8 py-6 sm:border-t">
-        <dt className="text-sm font-medium leading-6">
-          {plano.coparticipacao !== "Com coparticipação"
-            ? "Sem coparticipação"
-            : plano.percentualCopart != null
-              ? `Coparticipação ${plano.percentualCopart}%`
-              : "Com coparticipação"}
-        </dt>
-        <dd className="mt-1 text-sm leading-6 text-gray-500">
-          {plano.coparticipacao === "Com coparticipação" ? (
-            <>
-              Plano com mensalidades mais baratas, em que é preciso pagar uma parte das despesas ao realizar consultas,
-              exames, procedimentos e internações. <CoparticipacaoDetalhes />
-            </>
-          ) : (
-            "Não há cobrança adicional ao utilizar consultas, exames e procedimentos."
-          )}
-        </dd>
-      </div>
-      <div className="border-border px-8 py-6 sm:border-t">
-        <dt className="text-sm font-medium leading-6">Abrangência {plano.abrangencia.toLowerCase()}</dt>
-        <dd className="mt-1 text-sm leading-6 text-gray-500">
-          Registro do produto{ficticio ? " (fictício)" : " na ANS"}: {plano.registroAns}
-        </dd>
-      </div>
-      {ficticio && (
-        <div className="border-border px-8 py-6 sm:border-t">
-          <dt className="text-sm font-medium leading-6">Contratação {plano.contratacao.toLowerCase()}</dt>
-          <dd className="mt-1 text-sm leading-6 text-gray-500">
-            {plano.contratacao === "Compulsória"
-              ? "Todos os funcionários elegíveis entram no plano."
-              : "A adesão ao plano é opcional para os elegíveis."}
-          </dd>
-        </div>
-      )}
-    </dl>
+  const bloco = (titulo: React.ReactNode, texto: React.ReactNode, chave: string) => (
+    <div key={chave} className="border-border px-8 py-6 sm:border-t" data-info={chave}>
+      <dt className="text-sm font-medium leading-6">{titulo}</dt>
+      {texto && <dd className="mt-1 text-sm leading-6 text-gray-500">{texto}</dd>}
+    </div>
   );
+  const registro = `Registro do produto${ficticio ? " (fictício)" : " na ANS"}: ${plano.registroAns}`;
+  const blocos = [
+    item("acomodacao") &&
+      bloco(
+        plano.acomodacao === "Quarto Individual" ? "Quarto individual (apartamento)" : "Quarto coletivo (enfermaria)",
+        plano.acomodacao === "Quarto Individual"
+          ? "Em caso de internação, o paciente fica em um quarto particular e com a possibilidade de ter um acompanhante."
+          : "Em caso de internação, o paciente divide o quarto com outros pacientes.",
+        "acomodacao",
+      ),
+    item("coparticipacao") &&
+      bloco(
+        plano.coparticipacao !== "Com coparticipação"
+          ? "Sem coparticipação"
+          : plano.percentualCopart != null
+            ? `Coparticipação ${plano.percentualCopart}%`
+            : "Com coparticipação",
+        plano.coparticipacao === "Com coparticipação" ? (
+          <>
+            Plano com mensalidades mais baratas, em que é preciso pagar uma parte das despesas ao realizar consultas,
+            exames, procedimentos e internações. <CoparticipacaoDetalhes />
+          </>
+        ) : (
+          "Não há cobrança adicional ao utilizar consultas, exames e procedimentos."
+        ),
+        "coparticipacao",
+      ),
+    item("abrangencia")
+      ? bloco(`Abrangência ${plano.abrangencia.toLowerCase()}`, item("registro") ? registro : null, "abrangencia")
+      : item("registro") && bloco(registro, null, "registro"),
+    ficticio &&
+      item("contratacao") &&
+      bloco(
+        `Contratação ${plano.contratacao.toLowerCase()}`,
+        plano.contratacao === "Compulsória"
+          ? "Todos os funcionários elegíveis entram no plano."
+          : "A adesão ao plano é opcional para os elegíveis.",
+        "contratacao",
+      ),
+    item("idss") &&
+      op.idss != null &&
+      bloco(
+        `IDSS da operadora: ${numero(op.idss, 4)}`,
+        "Índice de Desempenho da Saúde Suplementar, calculado pela ANS (de 0 a 1; quanto maior, melhor).",
+        "idss",
+      ),
+    item("reajuste") &&
+      op.reajuste != null &&
+      bloco(
+        `Reajuste anual: ${numero(op.reajuste, 1)}%`,
+        `Último reajuste divulgado pela operadora${op.reajusteAnterior != null ? `; o anterior foi ${numero(op.reajusteAnterior, 1)}%` : ""}.`,
+        "reajuste",
+      ),
+  ].filter(Boolean);
+  const detalhes = blocos.length ? (
+    <dl className="grid divide-y divide-border lg:grid-cols-2 lg:divide-y-0">{blocos}</dl>
+  ) : null;
 
   return (
     <>
@@ -124,7 +139,7 @@ export default async function Cenario({
               <OperadoraLogo op={op} className="text-4xl" />
             </div>
           </div>
-          {o.maisInfo && <div className="hidden sm:grid">{detalhes}</div>}
+          {o.maisInfo && detalhes && <div className="hidden sm:grid">{detalhes}</div>}
         </div>
 
         <div className="sticky top-6 flex w-full flex-col gap-4 self-start md:w-96">
@@ -174,7 +189,9 @@ export default async function Cenario({
             <p className="mt-1 text-xs">Não há cobrança de taxa.</p>
           </div>
           {o.rede && <RedeCards plano={plano} op={op} hospitais={hospitais} />}
-          {o.maisInfo && <div className="block rounded-sm bg-background shadow-sm sm:hidden">{detalhes}</div>}
+          {o.maisInfo && detalhes && (
+            <div className="block rounded-sm bg-background shadow-sm sm:hidden">{detalhes}</div>
+          )}
         </div>
       </div>
     </>

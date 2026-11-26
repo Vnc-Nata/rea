@@ -5,6 +5,7 @@ import { Imprimir, PlanoIndisponivel, RegistrarVisualizacao } from "@/components
 import { buttonClass } from "@/lib/button";
 import { operadoraPorId, planoPorId } from "@/lib/catalogo";
 import { readDb } from "@/lib/db";
+import { mostraItem } from "@/lib/opcoes";
 import { OPCOES_PADRAO } from "@/lib/types";
 import { numero, precoDisponivel, precoTotal, totalVidas } from "@/lib/utils";
 
@@ -74,9 +75,11 @@ export default async function Proposta({
                 <div className="text-sm text-foreground/70">
                   <div className="font-medium text-foreground">{p.nome}</div>
                   <div>
-                    {p.segmento} {p.modalidade} · {p.acomodacao === "Quarto Individual" ? "Apartamento" : "Enfermaria"}
+                    {p.segmento} {p.modalidade}
+                    {mostraItem(o, "acomodacao") &&
+                      ` · ${p.acomodacao === "Quarto Individual" ? "Apartamento" : "Enfermaria"}`}
                   </div>
-                  <div>{p.coparticipacao}</div>
+                  {mostraItem(o, "coparticipacao") && <div>{p.coparticipacao}</div>}
                 </div>
               )}
               {!o.maisInfo && <div className="text-sm font-medium">{p.nome}</div>}

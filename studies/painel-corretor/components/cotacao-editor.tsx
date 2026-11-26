@@ -41,6 +41,7 @@ import type { Selecao } from "@/lib/selecao";
 import type { Cotacao, FiltroCotacao, Hospital, Modalidade, Operadora, Plano, Segmento } from "@/lib/types";
 import { FAIXAS, OPCOES_PADRAO, faixaDaIdade, faixaLabel } from "@/lib/types";
 import type { OpcoesEnvio } from "@/lib/types";
+import { alternar, itensDisponiveis, regioesDisponiveis, rotuloContagem } from "@/lib/opcoes";
 import { cn, idade, numero, precoDisponivel, precoTotal, tempoRelativo, totalVidas, vidasPorFaixa } from "@/lib/utils";
 import { OperadoraIcone, OperadoraLogo, OrigemPreco } from "./brand";
 import {
@@ -228,7 +229,14 @@ export function CotacaoEditor({
         mensagemPadrao={mensagemPadrao}
         onImprimir={imprimir}
       />
-      <OpcoesDialog open={drawer === "flags"} onClose={() => abrir()} cotacao={cotacao} />
+      <OpcoesDialog
+        open={drawer === "flags"}
+        onClose={() => abrir()}
+        cotacao={cotacao}
+        planos={cenarios.map((c) => planoMap[c.planoId])}
+        operadoras={operadoras}
+        hospitais={hospitais}
+      />
       <Comparativo
         open={drawer === "comparativo"}
         onClose={() => abrir()}
@@ -1114,31 +1122,103 @@ function CompartilharDialog({
   );
 }
 
-function OpcoesDialog({ open, onClose, cotacao }: { open: boolean; onClose: () => void; cotacao: Cotacao }) {
+function OpcoesDialog({
+  open,
+  onClose,
+  cotacao,
+  planos,
+  operadoras,
+  hospitais,
+}: {
+  open: boolean;
+  onClose: () => void;
+  cotacao: Cotacao;
+  planos: Plano[];
+  operadoras: Operadora[];
+  hospitais: Hospital[];
+}) {
   const [o, setO] = useState<OpcoesEnvio>(cotacao.opcoes ?? OPCOES_PADRAO);
+  const [lista, setLista] = useState<"regioes" | "itens" | null>(null);
   const [pending, start] = useTransition();
-  const Switch = ({ k, titulo, texto }: { k: "valores" | "rede" | "maisInfo"; titulo: string; texto: string }) => (
-    <label className="flex cursor-pointer items-center justify-between gap-4 py-3">
-      <div>
+  const regioes = regioesDisponiveis(planos, hospitais);
+  const itens = itensDisponiveis(planos, operadoras);
+  const chavesItens = itens.map((i) => i.chave as string);
+  const Switch = ({
+    k,
+    titulo,
+    texto,
+    extra,
+  }: {
+    k: "valores" | "rede" | "maisInfo";
+    titulo: string;
+    texto: string;
+    extra?: React.ReactNode;
+  }) => (
+    <div className="flex items-center justify-between gap-4 py-3">
+      <label htmlFor={`op-${k}`} className="flex-1 cursor-pointer">
         <div className="text-sm font-medium">{titulo}</div>
         <div className="text-xs text-muted-foreground">{texto}</div>
-      </div>
+      </label>
+      {extra}
       <input
+        id={`op-${k}`}
         type="checkbox"
         role="switch"
         checked={o[k]}
         onChange={(e) => setO({ ...o, [k]: e.target.checked })}
         className="size-5 accent-[hsl(var(--primary))]"
       />
-    </label>
+    </div>
   );
+  const BotaoLista = ({ qual, rotulo, ativo }: { qual: "regioes" | "itens"; rotulo: string; ativo: boolean }) => (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={!ativo}
+      aria-expanded={lista === qual}
+      data-lista={qual}
+      onClick={() => setLista(lista === qual ? null : qual)}
+    >
+      {rotulo}
+    </Button>
+  );
+  const Checklist = ({ qual, opcoes }: { qual: "regioes" | "itens"; opcoes: { valor: string; rotulo: string }[] }) => {
+    const todos = opcoes.map((x) => x.valor);
+    const sel = o[qual];
+    return (
+      <div className="mb-3 grid gap-1 rounded-md border p-3" data-checklist={qual}>
+        {opcoes.length === 0 && <p className="text-xs text-muted-foreground">Nenhum hospital na rede destes planos.</p>}
+        {opcoes.map((x) => (
+          <label key={x.valor} className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={!sel || sel.includes(x.valor)}
+              onChange={() => setO({ ...o, [qual]: alternar(sel, x.valor, todos) })}
+              className="size-4 accent-[hsl(var(--primary))]"
+            />
+            {x.rotulo}
+          </label>
+        ))}
+        {opcoes.length > 1 && (
+          <div className="mt-1 flex gap-3 text-xs">
+            <button type="button" className="text-primary" onClick={() => setO({ ...o, [qual]: undefined })}>
+              Marcar todos
+            </button>
+            <button type="button" className="text-primary" onClick={() => setO({ ...o, [qual]: [] })}>
+              Desmarcar todos
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
   return (
     <Modal
       open={open}
       onClose={onClose}
       title="Opções"
       description="Defina o que o cliente verá na proposta."
-      className="max-w-md"
+      className="max-h-[90vh] max-w-md overflow-auto"
     >
       <label className="grid gap-1 text-sm">
         <span className="font-medium">Validade</span>
@@ -1149,13 +1229,37 @@ function OpcoesDialog({ open, onClose, cotacao }: { open: boolean; onClose: () =
         />
       </label>
       <div className="divide-y">
-        <Switch k="valores" titulo="Valores" texto="Exibir mensalidades e valor por faixa etária." />
-        <Switch k="rede" titulo="Rede Credenciada" texto="Exibir hospitais e laboratórios da rede." />
-        <Switch
-          k="maisInfo"
-          titulo="Mais informações"
-          texto="Exibir acomodação, coparticipação, abrangência e contratação."
-        />
+        {Switch({ k: "valores", titulo: "Valores", texto: "Exibir mensalidades e valor por faixa etária." })}
+        <div>
+          {Switch({
+            k: "rede",
+            titulo: "Rede Credenciada",
+            texto: "Exibir hospitais e laboratórios da rede.",
+            extra: BotaoLista({
+              qual: "regioes",
+              rotulo: rotuloContagem(o.regioes, regioes, "regiões"),
+              ativo: o.rede,
+            }),
+          })}
+          {lista === "regioes" &&
+            o.rede &&
+            Checklist({ qual: "regioes", opcoes: regioes.map((r) => ({ valor: r, rotulo: r })) })}
+        </div>
+        <div>
+          {Switch({
+            k: "maisInfo",
+            titulo: "Mais informações",
+            texto: "Exibir acomodação, coparticipação, abrangência, registro na ANS e indicadores.",
+            extra: BotaoLista({
+              qual: "itens",
+              rotulo: rotuloContagem(o.itens, chavesItens, "itens"),
+              ativo: o.maisInfo,
+            }),
+          })}
+          {lista === "itens" &&
+            o.maisInfo &&
+            Checklist({ qual: "itens", opcoes: itens.map((i) => ({ valor: i.chave, rotulo: i.rotulo })) })}
+        </div>
       </div>
       <Button
         size="sm"
