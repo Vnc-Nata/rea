@@ -7,6 +7,15 @@ import type { Db } from "./types";
 // "Banco" local em JSON. Apague data/db.json (ou rode `npm run reset-db`) para voltar aos dados iniciais.
 const FILE = path.join(process.cwd(), "data", "db.json");
 
+/** mtime do db.json (0 se não existir), para caches que dependem dele. */
+export function mtimeDb(): number {
+  try {
+    return fs.statSync(FILE).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
 export function readDb(): Db {
   if (!fs.existsSync(FILE)) {
     const seed = criarSeed();

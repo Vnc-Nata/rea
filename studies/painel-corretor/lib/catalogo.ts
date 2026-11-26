@@ -14,7 +14,7 @@ import {
   type PlanoAns,
   type RedeAns,
 } from "./ans";
-import { readDb } from "./db";
+import { mtimeDb, readDb } from "./db";
 import { capitalizar, rotuloMunicipio } from "./municipios";
 import { CIDADES } from "./seed";
 import { lerTabelas, tabelaPara, type TabelaVenda } from "./tabelas";
@@ -44,7 +44,7 @@ export interface Catalogo {
 
 export const IOF_SEGURADORA = 0.0238;
 
-const CORES_GRUPO: Record<string, string> = {
+export const CORES_GRUPO: Record<string, string> = {
   Amil: "#0047bb",
   "Bradesco Saúde": "#cc092f",
   SulAmérica: "#f47920",
@@ -240,9 +240,42 @@ export function converterBase(
 // Leitura com cache
 
 let cache: { chave: string; cat: Catalogo } | null = null;
+let cacheAjustes: { mtime: number; ajustes: Record<string, number> } | null = null;
+let baseRuim: string | null = null; // dir+mtime de uma base.json que não abriu (avisa uma vez)
+
+const DIR_LOGOS = () => path.join(process.cwd(), "public", "logos");
+
+function mtime(arq: string): number {
+  try {
+    return fs.statSync(arq).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+/** Ajustes por operadora (Conta.ajustes); só relê o db.json quando o mtime muda. */
+function lerAjustes(): Record<string, number> {
+  const m = mtimeDb();
+  if (!cacheAjustes || cacheAjustes.mtime !== m || m === 0)
+    cacheAjustes = { mtime: m, ajustes: readDb().conta?.ajustes ?? {} };
+  return cacheAjustes.ajustes;
+}
+
+/** base.json, ou null se não existir ou estiver corrompida (aviso no log, catálogo fictício). */
+function lerBaseSegura(): BaseAns | null {
+  const id = `${dirAns()}:${mtimeAns("base.json")}`;
+  if (baseRuim === id) return null;
+  try {
+    return lerBaseAns();
+  } catch (e) {
+    baseRuim = id;
+    console.warn(`[catalogo] base.json ilegível em ${dirAns()}; usando dados fictícios.`, e);
+    return null;
+  }
+}
 
 function logoDe(registro: string): string | undefined {
-  const arq = path.join(process.cwd(), "public", "logos", `${registro}.png`);
+  const arq = path.join(DIR_LOGOS(), `${registro}.png`);
   return fs.existsSync(arq) ? `/logos/${registro}.png` : undefined;
 }
 
@@ -260,12 +293,12 @@ function catalogoFicticio(): Catalogo {
 
 /** Catálogo atual (ANS se houver base.json, senão fictício). Cache por mtime dos arquivos + ajustes. */
 export function catalogo(): Catalogo {
-  const base = lerBaseAns();
+  const base = lerBaseSegura();
   if (!base) {
     cache = null;
     return catalogoFicticio();
   }
-  const ajustes = readDb().conta?.ajustes ?? {};
+  const ajustes = lerAjustes();
   const { tabelas } = lerTabelas();
   const chave = JSON.stringify([
     dirAns(),
@@ -273,6 +306,7 @@ export function catalogo(): Catalogo {
     mtimeAns("rede.json"),
     mtimeAns("indicadores.json"),
     tabelasVersao(tabelas),
+    mtime(DIR_LOGOS()),
     ajustes,
   ]);
   if (cache && cache.chave === chave) return cache.cat;

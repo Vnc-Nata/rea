@@ -7,7 +7,7 @@ import type { BaseAns, IndicadoresAns, RedeAns } from "../../lib/ans";
 import type { TabelaVenda } from "../../lib/tabelas";
 import type { Grupo, Plano } from "../../lib/types";
 import { vidasVazias } from "../../lib/types";
-import { catalogo, converterBase } from "../../lib/catalogo";
+import { CORES_GRUPO, catalogo, converterBase } from "../../lib/catalogo";
 import { rotuloMunicipio, ufDoCodigo } from "../../lib/municipios";
 import { precoDisponivel, precoTotal } from "../../lib/utils";
 import { readDb } from "../../lib/db";
@@ -191,4 +191,45 @@ test("com base em ANS_DIR o catálogo vem da ANS", () => {
   } finally {
     process.env.ANS_DIR = antes;
   }
+});
+
+test("cache estável quando a pasta de tabelas não existe", () => {
+  const antes = { ans: process.env.ANS_DIR, tab: process.env.TABELAS_DIR };
+  process.env.ANS_DIR = path.relative(process.cwd(), dir);
+  process.env.TABELAS_DIR = path.join(os.tmpdir(), "tabelas-que-nao-existem-" + process.pid);
+  try {
+    const c1 = catalogo();
+    assert.equal(c1.fonte, "ans");
+    assert.strictEqual(catalogo(), c1);
+    assert.strictEqual(catalogo(), c1);
+  } finally {
+    process.env.ANS_DIR = antes.ans;
+    if (antes.tab === undefined) delete process.env.TABELAS_DIR;
+    else process.env.TABELAS_DIR = antes.tab;
+  }
+});
+
+test("base.json corrompida cai no catálogo fictício sem erro", () => {
+  const ruim = fs.mkdtempSync(path.join(os.tmpdir(), "ans-ruim-"));
+  fs.writeFileSync(path.join(ruim, "base.json"), "{ corrompido");
+  const antes = process.env.ANS_DIR;
+  const warn = console.warn;
+  let avisos = 0;
+  console.warn = () => void avisos++;
+  process.env.ANS_DIR = ruim;
+  try {
+    assert.equal(catalogo().fonte, "ficticio");
+    assert.equal(catalogo().fonte, "ficticio");
+    assert.equal(avisos, 1);
+  } finally {
+    process.env.ANS_DIR = antes;
+    console.warn = warn;
+  }
+});
+
+test("cores cobrem exatamente os grupos de operadoras-alvo.json", () => {
+  const alvo = JSON.parse(fs.readFileSync(path.join(process.cwd(), "data", "ans", "operadoras-alvo.json"), "utf8")) as {
+    grupo: string;
+  }[];
+  assert.deepEqual(Object.keys(CORES_GRUPO).sort(), alvo.map((g) => g.grupo).sort());
 });

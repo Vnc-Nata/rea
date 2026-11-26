@@ -168,6 +168,11 @@ function lerArquivo(arquivo: string, texto: string, tabelas: TabelaVenda[], erro
 }
 
 const cache = new Map<string, { chave: string; r: { tabelas: TabelaVenda[]; erros: ErroTabela[] } }>();
+// Mesmo objeto sempre que a pasta não existe: quem usa a identidade como chave de cache não reconstrói à toa.
+const VAZIO: { tabelas: TabelaVenda[]; erros: ErroTabela[] } = Object.freeze({
+  tabelas: Object.freeze([]) as unknown as TabelaVenda[],
+  erros: Object.freeze([]) as unknown as ErroTabela[],
+});
 
 export function lerTabelas(dir?: string): { tabelas: TabelaVenda[]; erros: ErroTabela[] } {
   const base = dir ?? process.env.TABELAS_DIR ?? path.join(process.cwd(), "data", "tabelas");
@@ -178,7 +183,7 @@ export function lerTabelas(dir?: string): { tabelas: TabelaVenda[]; erros: ErroT
       .filter((n) => n.toLowerCase().endsWith(".csv"))
       .sort();
   } catch {
-    return { tabelas: [], erros: [] };
+    return VAZIO;
   }
   const stats = nomes.map((n) => {
     const s = fs.statSync(path.join(base, n));
